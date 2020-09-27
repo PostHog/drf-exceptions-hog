@@ -1,0 +1,30 @@
+name: CI
+
+on: push
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.6"
+      - name: Install dependencies
+        run: python setup.py develop && pip install -r requirements-test.txt
+      - name: Lint
+        run: python runtests.py --lint-only
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.6"
+      - name: Install dependencies
+        run: python setup.py develop && pip install -r requirements-test.txt
+      - name: Tests
+        run: python runtests.py --no-lint

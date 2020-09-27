@@ -1,0 +1,42 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OSX
+*.DS_Store
+
+# Distribution / packaging
+.Python
+build/
+dist/
+sdist/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+pip-wheel-metadata
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+coverage.xml
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django
+*.log
+
+# virtual environment stuff
+env/
+venv/
+.python-version
+
+# IDE
+.vscode
