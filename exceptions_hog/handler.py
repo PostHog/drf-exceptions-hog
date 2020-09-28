@@ -72,6 +72,17 @@ def _get_main_exception_and_code(exc) -> Tuple[str, Optional[str]]:
     failing validation), and returns the exception key and the computed exception code.
     """
 
+    def override_or_return(code: str) -> str:
+        """
+        Returns overridden code if needs to change or provided code.
+        """
+        if code == "invalid" and isinstance(exc, exceptions.ValidationError):
+            # Special handling for validation errors. Use `invalid_input` instead
+            # of `invalid` to provide more clarity.
+            return "invalid_input"
+
+        return code
+
     # Get base exception codes from DRF (if exception is DRF)
     if hasattr(exc, "get_codes"):
         codes = exc.get_codes()
@@ -82,14 +93,9 @@ def _get_main_exception_and_code(exc) -> Tuple[str, Optional[str]]:
         elif isinstance(codes, dict):
             key = next(iter(codes))  # Get first key
             code = codes[key] if isinstance(codes[key], str) else codes[key][0]
-            if code == "invalid" and isinstance(exc, exceptions.ValidationError):
-                # Special handling for validation errors. Use `invalid_input` instead
-                # of `invalid` to provide more clarity.
-                return ("invalid_input", key)
-            return (code, key)
-
-    if isinstance(exc, exceptions.ValidationError):
-        return ("invalid_input", None)
+            return (override_or_return(code), key)
+        elif isinstance(codes, list):
+            return (override_or_return(str(codes[0])), None)
 
     # TODO: Allow this default to be configured in settings
     return ("error", None)
@@ -112,7 +118,7 @@ def _get_detail(exc, exception_key: str = "") -> str:
                 else exc.detail[exception_key][0]
             )
         elif isinstance(exc.detail, list) and len(exc.detail) > 0:
-            return str(exc.detail[0])
+            return exc.detail[0]
 
     return DEFAULT_ERROR_DETAIL
 
