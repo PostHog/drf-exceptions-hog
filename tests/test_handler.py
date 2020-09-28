@@ -40,6 +40,19 @@ def test_throttled_exception() -> None:
     }
 
 
+def test_validation_error() -> None:
+    response = exception_handler(
+        exceptions.ValidationError("I did not like your input.")
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.data == {
+        "type": "validation_error",
+        "code": "invalid_input",  # Default code for `validation_error`
+        "detail": "I did not like your input.",
+        "attr": None,
+    }
+
+
 # Django & DRF exceptions
 
 

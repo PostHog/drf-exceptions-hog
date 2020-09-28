@@ -88,8 +88,11 @@ def _get_main_exception_and_code(exc) -> Tuple[str, Optional[str]]:
                 return ("invalid_input", key)
             return (code, key)
 
+    if isinstance(exc, exceptions.ValidationError):
+        return ("invalid_input", None)
+
     # TODO: Allow this default to be configured in settings
-    return (ErrorTypes.server_error.value, None)
+    return ("error", None)
 
 
 @ensure_string
