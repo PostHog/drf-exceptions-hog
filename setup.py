@@ -10,7 +10,7 @@ with open("README.md", "r") as f:
 
 
 setup(
-    name="DRF Exceptions Hog",
+    name="drf-exceptions-hog",
     version=version.__version__,
     author="PostHog",
     author_email="hey@posthog.com",
