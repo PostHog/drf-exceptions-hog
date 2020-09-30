@@ -84,6 +84,6 @@ def res_server_error():
     return {
         "type": "server_error",
         "code": "error",
-        "detail": "Something went wrong.",
+        "detail": "A server error occurred.",
         "attr": None,
     }

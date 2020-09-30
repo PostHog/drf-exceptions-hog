@@ -1,3 +1,4 @@
+from rest_framework.exceptions import APIException
 from rest_framework.generics import GenericAPIView
 from rest_framework.viewsets import ModelViewSet
 
@@ -33,5 +34,7 @@ class ExceptionView(GenericAPIView):
         elif exception_type == "key_error":
             sample_dict = {"a": 1}
             sample_dict["b"]
+        elif exception_type == "api_error":
+            raise APIException()
 
         raise Exception("Shouldn't be included in the response.")

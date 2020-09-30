@@ -1,5 +1,9 @@
+from unittest.mock import Mock
+
 import pytest
 from rest_framework import status
+
+from exceptions_hog.settings import api_settings
 
 
 @pytest.mark.django_db
@@ -82,6 +86,11 @@ class TestAPI:
         error message is returned in these cases to avoid leaking sensitive information.
         """
 
+        # API error
+        response = test_client.post("/exception", {"type": "api_error"})
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert response.data == res_server_error
+
         # Assertion error
         response = test_client.post("/exception", {"type": "assertion_error"})
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -99,5 +108,25 @@ class TestAPI:
 
         # Exception
         response = test_client.post("/exception")
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert response.data == res_server_error
+
+    def test_custom_exception_reporting(
+        self, monkeypatch, test_client, res_server_error
+    ) -> None:
+
+        mock = Mock()
+        monkeypatch.setattr(api_settings, "EXCEPTION_REPORTING", mock)
+
+        response = test_client.post("/exception", {"type": "assertion_error"})
+
+        # Assert that the reporting function was called correctly
+        mock.assert_called_once()
+        assert (
+            str(mock.call_args[0][0])
+            == "Set a custom message and make sure it isn't leaked in the response."
+        )
+
+        # Error response behavior is the same
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert response.data == res_server_error
