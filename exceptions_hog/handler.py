@@ -9,9 +9,10 @@ from rest_framework import exceptions, status
 from rest_framework.response import Response
 
 from .exceptions import ProtectedObjectException
+from .settings import api_settings
 from .utils import ensure_string
 
-DEFAULT_ERROR_DETAIL = _("Something went wrong.")
+DEFAULT_ERROR_DETAIL = _("A server error occurred.")
 
 
 class ErrorTypes(Enum):
@@ -135,6 +136,16 @@ def _get_http_status(exc) -> int:
     )
 
 
+def exception_reporter(exc: BaseException, context: Optional[Dict] = None) -> None:
+    """
+    Logic for reporting an exception to any APMs.
+    Example:
+        if not isinstance(exc, exceptions.APIException):
+            capture_exception(exc)
+    """
+    pass
+
+
 def exception_handler(exc: BaseException, context: Optional[Dict] = None) -> Response:
 
     # Handle Django base exceptions
@@ -149,6 +160,8 @@ def exception_handler(exc: BaseException, context: Optional[Dict] = None) -> Res
         )
 
     exception_code, exception_key = _get_main_exception_and_code(exc)
+
+    api_settings.EXCEPTION_REPORTING(exc, context)
 
     return Response(
         dict(
