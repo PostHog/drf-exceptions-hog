@@ -127,6 +127,6 @@ To run a local copy of the package for development, please follow these instruct
 
 ## 👨‍⚖️ License
 
-We ♥ Open Source! This repository is MIT licensed. Full license [here](LICENSE).
+We ♥ Open Source! This repository is MIT licensed by PostHog. Full license [here](LICENSE).
 
 [drf]: https://github.com/encode/django-rest-framework
