@@ -1,13 +1,14 @@
 from enum import Enum
 from typing import Dict, Optional, Tuple, Union
-from django.conf import settings
 
+from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.db.models import ProtectedError
 from django.http import Http404
 from django.utils.translation import gettext as _
 from rest_framework import exceptions, status
 from rest_framework.response import Response
+from rest_framework.views import exception_handler as _vanilla_exception_handler
 
 from .exceptions import ProtectedObjectException
 from .settings import api_settings
@@ -146,32 +147,36 @@ def exception_reporter(exc: BaseException, context: Optional[Dict] = None) -> No
     """
     pass
 
-# By default use default rest_framework's exception_handler instead of exceptions_hog's when Django DEBUG is enabled
-if settings.DEBUG and not api_settings.ENABLE_IN_DEBUG:
-    from rest_framework.views import exception_handler
-else:
-    def exception_handler(exc: BaseException, context: Optional[Dict] = None) -> Response:
-        # Handle Django base exceptions
-        if isinstance(exc, Http404):
-            exc = exceptions.NotFound()
-        elif isinstance(exc, PermissionDenied):
-            exc = exceptions.PermissionDenied()
-        elif isinstance(exc, ProtectedError):
-            exc = ProtectedObjectException(
-                "",
-                protected_objects=exc.protected_objects,
-            )
 
-        exception_code, exception_key = _get_main_exception_and_code(exc)
-
-        api_settings.EXCEPTION_REPORTING(exc, context)
-
-        return Response(
-            dict(
-                type=_get_error_type(exc),
-                code=exception_code,
-                detail=_get_detail(exc, exception_key),
-                attr=_get_attr(exc, exception_key),
-            ),
-            status=_get_http_status(exc),
+def _exception_handler(exc: BaseException, context: Optional[Dict] = None) -> Response:
+    # Handle Django base exceptions
+    if isinstance(exc, Http404):
+        exc = exceptions.NotFound()
+    elif isinstance(exc, PermissionDenied):
+        exc = exceptions.PermissionDenied()
+    elif isinstance(exc, ProtectedError):
+        exc = ProtectedObjectException(
+            "",
+            protected_objects=exc.protected_objects,
         )
+
+    exception_code, exception_key = _get_main_exception_and_code(exc)
+
+    api_settings.EXCEPTION_REPORTING(exc, context)
+
+    return Response(
+        dict(
+            type=_get_error_type(exc),
+            code=exception_code,
+            detail=_get_detail(exc, exception_key),
+            attr=_get_attr(exc, exception_key),
+        ),
+        status=_get_http_status(exc),
+    )
+
+
+# By default use default rest_framework's exception_handler instead of exceptions_hog's when Django DEBUG is enabled
+is_exceptions_hog_enabled = not settings.DEBUG or api_settings.ENABLE_IN_DEBUG
+exception_handler = (
+    _exception_handler if is_exceptions_hog_enabled else _vanilla_exception_handler
+)
