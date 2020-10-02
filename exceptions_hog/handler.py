@@ -1,5 +1,6 @@
 from enum import Enum
 from typing import Dict, Optional, Tuple, Union
+from django.conf import settings
 
 from django.core.exceptions import PermissionDenied
 from django.db.models import ProtectedError
@@ -145,30 +146,32 @@ def exception_reporter(exc: BaseException, context: Optional[Dict] = None) -> No
     """
     pass
 
+# By default use default rest_framework's exception_handler instead of exceptions_hog's when Django DEBUG is enabled
+if settings.DEBUG and not api_settings.ENABLE_IN_DEBUG:
+    from rest_framework.views import exception_handler
+else:
+    def exception_handler(exc: BaseException, context: Optional[Dict] = None) -> Response:
+        # Handle Django base exceptions
+        if isinstance(exc, Http404):
+            exc = exceptions.NotFound()
+        elif isinstance(exc, PermissionDenied):
+            exc = exceptions.PermissionDenied()
+        elif isinstance(exc, ProtectedError):
+            exc = ProtectedObjectException(
+                "",
+                protected_objects=exc.protected_objects,
+            )
 
-def exception_handler(exc: BaseException, context: Optional[Dict] = None) -> Response:
+        exception_code, exception_key = _get_main_exception_and_code(exc)
 
-    # Handle Django base exceptions
-    if isinstance(exc, Http404):
-        exc = exceptions.NotFound()
-    elif isinstance(exc, PermissionDenied):
-        exc = exceptions.PermissionDenied()
-    elif isinstance(exc, ProtectedError):
-        exc = ProtectedObjectException(
-            "",
-            protected_objects=exc.protected_objects,
+        api_settings.EXCEPTION_REPORTING(exc, context)
+
+        return Response(
+            dict(
+                type=_get_error_type(exc),
+                code=exception_code,
+                detail=_get_detail(exc, exception_key),
+                attr=_get_attr(exc, exception_key),
+            ),
+            status=_get_http_status(exc),
         )
-
-    exception_code, exception_key = _get_main_exception_and_code(exc)
-
-    api_settings.EXCEPTION_REPORTING(exc, context)
-
-    return Response(
-        dict(
-            type=_get_error_type(exc),
-            code=exception_code,
-            detail=_get_detail(exc, exception_key),
-            attr=_get_attr(exc, exception_key),
-        ),
-        status=_get_http_status(exc),
-    )
