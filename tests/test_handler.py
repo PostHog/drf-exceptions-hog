@@ -152,7 +152,7 @@ def test_type_error(res_server_error) -> None:
 # Non-APIException handling disabled in DEBUG mode
 
 
-def test_throttled_exception() -> None:
+def test_throttled_exception_debug(settings) -> None:
     settings.DEBUG = True
     # Same as normal since APIException
     response = exception_handler(exceptions.Throttled(62))
@@ -165,12 +165,8 @@ def test_throttled_exception() -> None:
         "attr": None,
     }
 
-def test_not_found_exception_debug(settings) -> None:
-    settings.DEBUG = True
-    # Return None since not APIException
-    response = exception_handler(exceptions.NotFound())
-    assert response is None
 
-    # Test Django base exception too
-    response = exception_handler(Http404())
+def test_type_error_debug(settings) -> None:
+    settings.DEBUG = True
+    response = exception_handler(TypeError())
     assert response is None

@@ -151,7 +151,11 @@ def exception_handler(
     exc: BaseException, context: Optional[Dict] = None
 ) -> Optional[Response]:
     # Handle Django base exceptions
-    if getattr(settings, "DEBUG", False) and not api_settings.ENABLE_IN_DEBUG:
+    if (
+        getattr(settings, "DEBUG", False)
+        and not api_settings.ENABLE_IN_DEBUG
+        and not isinstance(exc, exceptions.APIException)
+    ):
         # By default don't handle errors in DEBUG mode
         return None
     if isinstance(exc, Http404):
