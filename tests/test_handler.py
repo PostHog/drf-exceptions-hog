@@ -4,6 +4,7 @@ from django.http import Http404
 from rest_framework import exceptions, status
 
 from exceptions_hog.handler import exception_handler
+from exceptions_hog.settings import api_settings
 
 # DRF exceptions
 
@@ -186,3 +187,13 @@ def test_type_error_debug(settings) -> None:
     # Not handled, since not APIException instance
     response = exception_handler(TypeError())
     assert response is None
+
+
+def test_type_error_enabled_in_debug(res_server_error, settings, monkeypatch) -> None:
+    settings.DEBUG = True
+    monkeypatch.setattr(api_settings, "ENABLE_IN_DEBUG", True)
+    # Handled, since ENABLE_IN_DEBUG is True
+    response = exception_handler(TypeError())
+    assert response is not None
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert response.data == res_server_error
