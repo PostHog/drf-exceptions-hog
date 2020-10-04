@@ -154,7 +154,7 @@ def test_type_error(res_server_error) -> None:
 
 def test_throttled_exception_debug(settings) -> None:
     settings.DEBUG = True
-    # Same as normal since APIException
+    # Same as normal since APIException instance
     response = exception_handler(exceptions.Throttled(62))
     assert response is not None
     assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
@@ -166,7 +166,23 @@ def test_throttled_exception_debug(settings) -> None:
     }
 
 
+def test_not_found_exception_debug(settings, res_not_found) -> None:
+    settings.DEBUG = True
+    # Same as normal, since APIException instance
+    response = exception_handler(exceptions.NotFound())
+    assert response is not None
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.data == res_not_found
+
+    # Test Django base exception too
+    # Not handled, since not APIException instance
+    # (Django errors only inherit from the Python Exception)
+    response = exception_handler(Http404())
+    assert response is None
+
+
 def test_type_error_debug(settings) -> None:
     settings.DEBUG = True
+    # Not handled, since not APIException instance
     response = exception_handler(TypeError())
     assert response is None
