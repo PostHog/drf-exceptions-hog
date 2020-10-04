@@ -8,7 +8,6 @@ from django.http import Http404
 from django.utils.translation import gettext as _
 from rest_framework import exceptions, status
 from rest_framework.response import Response
-from rest_framework.views import exception_handler as _vanilla_exception_handler
 
 from .exceptions import ProtectedObjectException
 from .settings import api_settings
@@ -148,8 +147,13 @@ def exception_reporter(exc: BaseException, context: Optional[Dict] = None) -> No
     pass
 
 
-def _exception_handler(exc: BaseException, context: Optional[Dict] = None) -> Response:
+def exception_handler(
+    exc: BaseException, context: Optional[Dict] = None
+) -> Optional[Response]:
     # Handle Django base exceptions
+    if getattr(settings, "DEBUG", False) and not api_settings.ENABLE_IN_DEBUG:
+        # By default don't handle errors in DEBUG mode
+        return None
     if isinstance(exc, Http404):
         exc = exceptions.NotFound()
     elif isinstance(exc, PermissionDenied):
@@ -173,10 +177,3 @@ def _exception_handler(exc: BaseException, context: Optional[Dict] = None) -> Re
         ),
         status=_get_http_status(exc),
     )
-
-
-# By default use default rest_framework's exception_handler instead of exceptions_hog's when Django DEBUG is enabled
-is_exceptions_hog_enabled = not settings.DEBUG or api_settings.ENABLE_IN_DEBUG
-exception_handler = (
-    _exception_handler if is_exceptions_hog_enabled else _vanilla_exception_handler
-)
