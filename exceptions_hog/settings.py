@@ -11,6 +11,7 @@ DEFAULTS: Dict = {
 }
 
 # List of settings that may be in string import notation.
-IMPORT_STRINGS = ("EXCEPTION_REPORTING", "ENABLE_IN_DEBUG")
+# e.g. `exceptions_hog.exception_handler`
+IMPORT_STRINGS = ("EXCEPTION_REPORTING",)
 
 api_settings: APISettings = APISettings(USER_SETTINGS, DEFAULTS, IMPORT_STRINGS)

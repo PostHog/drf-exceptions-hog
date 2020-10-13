@@ -80,7 +80,13 @@ class TestAPI:
             "attr": "name",
         }
 
-    def test_unhandled_server_error(self, test_client, res_server_error) -> None:
+    def test_unhandled_server_error(
+        self,
+        test_client,
+        res_server_error,
+        settings,
+        monkeypatch,
+    ) -> None:
         """
         Tests generic unhandled Python exceptions. Note we assert that a generic
         error message is returned in these cases to avoid leaking sensitive information.
@@ -106,7 +112,9 @@ class TestAPI:
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert response.data == res_server_error
 
-        # Exception
+        # Exception (even on debug but with ENABLE_IN_DEBUG)
+        settings.DEBUG = True
+        monkeypatch.setattr(api_settings, "ENABLE_IN_DEBUG", True)
         response = test_client.post("/exception")
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert response.data == res_server_error
@@ -130,3 +138,16 @@ class TestAPI:
         # Error response behavior is the same
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert response.data == res_server_error
+
+    def test_yield_non_drf_exceptions_to_django_in_debug(self, test_client, settings):
+        settings.DEBUG = True
+
+        # Key Error
+        with pytest.raises(KeyError) as e:
+            test_client.post("/exception", {"type": "key_error"})
+        assert e.typename == "KeyError"
+
+        # Assertion Error
+        with pytest.raises(AssertionError) as e:
+            test_client.post("/exception", {"type": "assertion_error"})
+        assert e.typename == "AssertionError"

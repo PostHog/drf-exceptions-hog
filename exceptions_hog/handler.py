@@ -150,14 +150,8 @@ def exception_reporter(exc: BaseException, context: Optional[Dict] = None) -> No
 def exception_handler(
     exc: BaseException, context: Optional[Dict] = None
 ) -> Optional[Response]:
-    # Handle Django base exceptions
-    if (
-        getattr(settings, "DEBUG", False)
-        and not api_settings.ENABLE_IN_DEBUG
-        and not isinstance(exc, exceptions.APIException)
-    ):
-        # By default don't handle errors in DEBUG mode
-        return None
+
+    # Special handling for Django base exceptions first
     if isinstance(exc, Http404):
         exc = exceptions.NotFound()
     elif isinstance(exc, PermissionDenied):
@@ -167,6 +161,15 @@ def exception_handler(
             "",
             protected_objects=exc.protected_objects,
         )
+
+    if (
+        getattr(settings, "DEBUG", False)
+        and not api_settings.ENABLE_IN_DEBUG
+        and not isinstance(exc, exceptions.APIException)
+    ):
+        # By default don't handle non-DRF errors in DEBUG mode, i.e. Django will treat
+        # unhandled exceptions regularly (very evident yellow error page)
+        return None
 
     exception_code, exception_key = _get_main_exception_and_code(exc)
 
