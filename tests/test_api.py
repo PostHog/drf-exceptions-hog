@@ -4,6 +4,7 @@ import pytest
 from rest_framework import status
 
 from exceptions_hog.settings import api_settings
+from test_project.test_app.models import Hedgehog
 
 
 @pytest.mark.django_db
@@ -118,6 +119,17 @@ class TestAPI:
         response = test_client.post("/exception")
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert response.data == res_server_error
+
+    def test_rollback_transactions_normally(
+        self, test_client, res_server_error
+    ) -> None:
+        count = Hedgehog.objects.count()
+
+        response = test_client.post("/exception", {"type": "atomic_transaction"})
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert response.data == res_server_error
+
+        assert Hedgehog.objects.count() == count + 1  # only one object is committed
 
     def test_custom_exception_reporting(
         self, monkeypatch, test_client, res_server_error

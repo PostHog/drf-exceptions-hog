@@ -8,6 +8,7 @@ from django.http import Http404
 from django.utils.translation import gettext as _
 from rest_framework import exceptions, status
 from rest_framework.response import Response
+from rest_framework.views import set_rollback
 
 from .exceptions import ProtectedObjectException
 from .settings import api_settings
@@ -174,6 +175,8 @@ def exception_handler(
     exception_code, exception_key = _get_main_exception_and_code(exc)
 
     api_settings.EXCEPTION_REPORTING(exc, context)
+
+    set_rollback()
 
     return Response(
         dict(
