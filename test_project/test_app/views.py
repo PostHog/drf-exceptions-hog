@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework.exceptions import APIException
 from rest_framework.generics import GenericAPIView
 from rest_framework.viewsets import ModelViewSet
@@ -36,5 +37,11 @@ class ExceptionView(GenericAPIView):
             sample_dict["b"]
         elif exception_type == "api_error":
             raise APIException()
+        elif exception_type == "atomic_transaction":
+            Hedgehog.objects.create(name="One")
+
+            with transaction.atomic():
+                Hedgehog.objects.create(name="Two")
+                raise APIException()
 
         raise Exception("Shouldn't be included in the response.")
