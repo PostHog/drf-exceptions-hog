@@ -2,9 +2,11 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import ProtectedError
 from django.http import Http404
 from rest_framework import exceptions, status
+from rest_framework.exceptions import ErrorDetail
 
 from exceptions_hog.handler import exception_handler
 from exceptions_hog.settings import api_settings
+
 
 # DRF exceptions
 
@@ -73,6 +75,30 @@ def test_validation_error() -> None:
     }
 
 
+def test_validation_error_serializer_field() -> None:
+    response = exception_handler(exceptions.ValidationError({'phone_number': [ErrorDetail(string='This field is required.', code='required')]}))
+    assert response is not None
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.data == {
+        "type": "validation_error",
+        "code": "required",
+        "detail": "This field is required.",
+        "attr": "phone_number",
+    }
+
+
+def test_validation_error_nested_serializer_field() -> None:
+    response = exception_handler(exceptions.ValidationError({'extra_info': {'phone_number': [ErrorDetail(string='This field is required.', code='required')]}}))
+    assert response is not None
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.data == {
+        "type": "validation_error",
+        "code": "required",
+        "detail": "This field is required.",
+        "attr": "extra_info->phone_number",
+    }
+
+
 # Django & DRF exceptions
 
 
@@ -112,7 +138,7 @@ def test_protected_error() -> None:
         "type": "invalid_request",
         "code": "protected_error",
         "detail": "Requested operation cannot be completed because"
-        " a related object is protected.",
+                  " a related object is protected.",
         "attr": None,
     }
 
@@ -191,7 +217,7 @@ def test_python_exception_in_debug(settings) -> None:
 
 
 def test_python_exception_with_enabled_in_debug(
-    res_server_error, settings, monkeypatch
+        res_server_error, settings, monkeypatch
 ) -> None:
     settings.DEBUG = True
     monkeypatch.setattr(api_settings, "ENABLE_IN_DEBUG", True)
