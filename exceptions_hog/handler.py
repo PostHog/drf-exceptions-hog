@@ -86,16 +86,6 @@ def _get_main_exception_and_code(exc) -> Tuple[str, Optional[str]]:
 
         return code
 
-    def get_nested_dict_key_code(codes):
-        iterating_key = next(iter(codes))  # Get first key
-        res_key = iterating_key
-        while isinstance(codes[iterating_key], dict):
-            codes = codes[iterating_key]
-            iterating_key = next(iter(codes))
-            res_key += api_settings.NESTED_KEY_SEPARATOR + iterating_key
-        code = codes[iterating_key] if isinstance(codes[iterating_key], str) else codes[iterating_key][0]
-        return code, res_key
-
     # Get base exception codes from DRF (if exception is DRF)
     if hasattr(exc, "get_codes"):
         codes = exc.get_codes()
@@ -104,7 +94,18 @@ def _get_main_exception_and_code(exc) -> Tuple[str, Optional[str]]:
             # Only one exception, return
             return (codes, None)
         elif isinstance(codes, dict):
-            code, key = get_nested_dict_key_code(codes)
+            # If object is a dict or nested dict, return the key of the very first error
+            iterating_key = next(iter(codes))  # Get initial key
+            key = iterating_key
+            while isinstance(codes[iterating_key], dict):
+                codes = codes[iterating_key]
+                iterating_key = next(iter(codes))
+                key += api_settings.NESTED_KEY_SEPARATOR + iterating_key
+            code = (
+                codes[iterating_key]
+                if isinstance(codes[iterating_key], str)
+                else codes[iterating_key][0]
+            )
             return (override_or_return(code), key)
         elif isinstance(codes, list):
             return (override_or_return(str(codes[0])), None)
@@ -116,16 +117,6 @@ def _get_main_exception_and_code(exc) -> Tuple[str, Optional[str]]:
 @ensure_string
 def _get_detail(exc, exception_key: str = "") -> str:
 
-    def get_nested_dict_detail(dic: dict, nested_key: str) -> str:
-        value = None
-        keys = nested_key.split(api_settings.NESTED_KEY_SEPARATOR)
-        for key in keys:
-            value = dic[key]
-            dic = dic[key]
-
-        detail = value if isinstance(value, str) else value[0]
-        return detail
-
     if hasattr(exc, "detail"):
         # Get exception details if explicitly set. We don't obtain exception information
         # from base Python exceptions to avoid leaking sensitive information.
@@ -134,7 +125,11 @@ def _get_detail(exc, exception_key: str = "") -> str:
                 exc.detail
             )  # We do str() to get the actual error string on ErrorDetail instances
         elif isinstance(exc.detail, dict):
-            return str(get_nested_dict_detail(exc.detail, exception_key))
+            iterating_dict = exc.detail
+            for key in exception_key.split(api_settings.NESTED_KEY_SEPARATOR):
+                iterating_dict = iterating_dict[key]
+                value = iterating_dict[key]
+            return str(value if isinstance(value, str) else value[0])
         elif isinstance(exc.detail, list) and len(exc.detail) > 0:
             return exc.detail[0]
 
