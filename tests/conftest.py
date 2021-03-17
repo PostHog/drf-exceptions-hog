@@ -9,6 +9,7 @@ def pytest_configure():
     from django.conf import settings
 
     settings.configure(
+        SECRET_KEY="#mk0y8q%rh!ieekh5h#39b@a99u3eg$93kc9oq#z1kpzvg+k2_",
         INSTALLED_APPS=[
             "django.contrib.contenttypes",
             "django.contrib.auth",

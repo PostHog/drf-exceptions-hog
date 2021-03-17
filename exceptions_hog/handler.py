@@ -94,8 +94,18 @@ def _get_main_exception_and_code(exc) -> Tuple[str, Optional[str]]:
             # Only one exception, return
             return (codes, None)
         elif isinstance(codes, dict):
-            key = next(iter(codes))  # Get first key
-            code = codes[key] if isinstance(codes[key], str) else codes[key][0]
+            # If object is a dict or nested dict, return the key of the very first error
+            iterating_key = next(iter(codes))  # Get initial key
+            key = iterating_key
+            while isinstance(codes[iterating_key], dict):
+                codes = codes[iterating_key]
+                iterating_key = next(iter(codes))
+                key = f"{key}{api_settings.NESTED_KEY_SEPARATOR}{iterating_key}"
+            code = (
+                codes[iterating_key]
+                if isinstance(codes[iterating_key], str)
+                else codes[iterating_key][0]
+            )
             return (override_or_return(code), key)
         elif isinstance(codes, list):
             return (override_or_return(str(codes[0])), None)
@@ -115,11 +125,10 @@ def _get_detail(exc, exception_key: str = "") -> str:
                 exc.detail
             )  # We do str() to get the actual error string on ErrorDetail instances
         elif isinstance(exc.detail, dict):
-            return str(
-                exc.detail[exception_key][0]
-                if isinstance(exc.detail[exception_key], str)
-                else exc.detail[exception_key][0]
-            )
+            value = exc.detail
+            for key in exception_key.split(api_settings.NESTED_KEY_SEPARATOR):
+                value = value[key]
+            return str(value if isinstance(value, str) else value[0])
         elif isinstance(exc.detail, list) and len(exc.detail) > 0:
             return exc.detail[0]
 
