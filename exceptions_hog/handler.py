@@ -116,7 +116,6 @@ def _get_main_exception_and_code(exc) -> Tuple[str, Optional[str]]:
 
 @ensure_string
 def _get_detail(exc, exception_key: str = "") -> str:
-    
 
     if hasattr(exc, "detail"):
         # Get exception details if explicitly set. We don't obtain exception information
