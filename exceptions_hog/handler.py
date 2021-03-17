@@ -100,7 +100,7 @@ def _get_main_exception_and_code(exc) -> Tuple[str, Optional[str]]:
             while isinstance(codes[iterating_key], dict):
                 codes = codes[iterating_key]
                 iterating_key = next(iter(codes))
-                key += api_settings.NESTED_KEY_SEPARATOR + iterating_key
+                key = f"{key}{api_settings.NESTED_KEY_SEPARATOR}{iterating_key}"
             code = (
                 codes[iterating_key]
                 if isinstance(codes[iterating_key], str)
@@ -116,6 +116,7 @@ def _get_main_exception_and_code(exc) -> Tuple[str, Optional[str]]:
 
 @ensure_string
 def _get_detail(exc, exception_key: str = "") -> str:
+    
 
     if hasattr(exc, "detail"):
         # Get exception details if explicitly set. We don't obtain exception information
@@ -125,10 +126,9 @@ def _get_detail(exc, exception_key: str = "") -> str:
                 exc.detail
             )  # We do str() to get the actual error string on ErrorDetail instances
         elif isinstance(exc.detail, dict):
-            iterating_dict = exc.detail
+            value = exc.detail
             for key in exception_key.split(api_settings.NESTED_KEY_SEPARATOR):
-                iterating_dict = iterating_dict[key]
-                value = iterating_dict[key]
+                value = value[key]
             return str(value if isinstance(value, str) else value[0])
         elif isinstance(exc.detail, list) and len(exc.detail) > 0:
             return exc.detail[0]

@@ -121,6 +121,45 @@ def test_validation_error_with_simple_nested_serializer_field() -> None:
     }
 
 
+def test_validation_error_with_complex_nested_serializer_field() -> None:
+    response = exception_handler(
+        exceptions.ValidationError(
+            {
+                "parent": {
+                    "l1_attr": {
+                        "l2_attr": {
+                            "l3_attr": ErrorDetail(
+                                string="Focus on this error.", code="focus"
+                            ),
+                        },
+                        "l2_attr_2": {
+                            "l3_attr_2": [
+                                ErrorDetail(
+                                    string="This field is also invalid.",
+                                    code="invalid_too",
+                                )
+                            ]
+                        },
+                    },
+                    "l1_attr_2": [
+                        ErrorDetail(
+                            string="This field is also invalid.", code="invalid_too"
+                        )
+                    ],
+                }
+            }
+        )
+    )
+    assert response is not None
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.data == {
+        "type": "validation_error",
+        "code": "focus",
+        "detail": "Focus on this error.",
+        "attr": "parent__l1_attr__l2_attr__l3_attr",
+    }
+
+
 # Django & DRF exceptions
 
 
