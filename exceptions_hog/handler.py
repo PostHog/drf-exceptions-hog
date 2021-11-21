@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
@@ -67,6 +67,27 @@ def _get_error_type(exc) -> Union[str, ErrorTypes]:
     # Couldn't determine type, default to generic error
     # TODO: Allow this default to be configured in settings
     return ErrorTypes.server_error
+
+
+def _normalize_exception_codes(
+        exception_codes: Dict, parent_key: str = "",
+        separator: str = api_settings.NESTED_KEY_SEPARATOR,
+) -> Dict:
+    items: List = []
+    for key, value in exception_codes.items():
+        new_key = parent_key + separator + key if parent_key else key
+
+        if isinstance(value, dict):
+            items.extend(
+                _normalize_exception_codes(
+                    value.copy(),
+                    new_key,
+                    separator=separator,
+                ).items()
+            )
+        else:
+            items.append((new_key, value))
+    return dict(items)
 
 
 def _get_main_exception_and_code(exc) -> Tuple[str, Optional[str]]:
