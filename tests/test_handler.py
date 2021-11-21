@@ -288,3 +288,62 @@ def test_python_exception_with_enabled_in_debug(
     assert response is not None
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     assert response.data == res_server_error
+
+
+# test list of all exceptions
+
+
+def test_list_response_validation_error_with_complex_nested_serializer_field(
+    res_server_error, settings, monkeypatch
+) -> None:
+    monkeypatch.setattr(api_settings, "INCLUDE_ALL_EXCEPTIONS", True)
+    response = exception_handler(
+        exceptions.ValidationError(
+            {
+                "parent": {
+                    "l1_attr": {
+                        "l2_attr": {
+                            "l3_attr": ErrorDetail(
+                                string="Focus on this error.", code="focus"
+                            ),
+                        },
+                        "l2_attr_2": {
+                            "l3_attr_2": [
+                                ErrorDetail(
+                                    string="This field is also invalid.",
+                                    code="invalid_too",
+                                )
+                            ]
+                        },
+                    },
+                    "l1_attr_2": [
+                        ErrorDetail(
+                            string="This field is also invalid.", code="invalid_too"
+                        )
+                    ],
+                }
+            }
+        )
+    )
+    assert response is not None
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.data == [
+        {
+            "type": "validation_error",
+            "code": "focus",
+            "detail": "Focus on this error.",
+            "attr": "parent__l1_attr__l2_attr__l3_attr",
+        },
+        {
+            "type": "validation_error",
+            "code": "invalid_too",
+            "detail": "This field is also invalid.",
+            "attr": "parent__l1_attr__l2_attr_2__l3_attr_2",
+        },
+        {
+            "type": "validation_error",
+            "code": "invalid_too",
+            "detail": "This field is also invalid.",
+            "attr": "parent__l1_attr_2",
+        },
+    ]
