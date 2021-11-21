@@ -65,12 +65,14 @@ EXCEPTIONS_HOG = {
     "EXCEPTION_REPORTING": "exceptions_hog.handler.exception_reporter",
     "ENABLE_IN_DEBUG": False,
     "NESTED_KEY_SEPARATOR": "__",
+    "INCLUDE_ALL_EXCEPTIONS": False,
 }
 ```
 
 - `EXCEPTION_REPORTING`: specify a method to call after an exception occurs. Particularly useful to report errors (e.g. through Sentry, NewRelic, ...). Default: `exceptions_hog.handler.exception_reporter`
 - `ENABLE_IN_DEBUG`: whether exceptions-hog should run when `DEBUG = 1`. It's useful to turn this off in debugging to get full error stack traces when developing. Defaut: `False`.
 - `NESTED_KEY_SEPARATOR`: customize the separator used for obtaining the `attr` name if the exception comes from nested objects (e.g. nested serializers). Default: `__`.
+- `INCLUDE_ALL_EXCEPTIONS`: defines whether exceptions-hog should return all errors as list or only one of them as dictionary. Default: False.
 
 ## 📑 Documentation
 
