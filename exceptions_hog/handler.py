@@ -90,17 +90,12 @@ def _normalize_exception_codes(
     return dict(items)
 
 
-def _get_main_exception_and_code(exc) -> Tuple[str, Optional[str]]:
-    """
-    Finds the main exception when there are multiple exceptions (e.g. when two inputs are
-    failing validation), and returns the exception key and the computed exception code.
-    """
-
+def _get_main_exception_and_code(exception_codes: Dict) -> Tuple[str, Optional[str]]:
     def override_or_return(code: str) -> str:
         """
         Returns overridden code if needs to change or provided code.
         """
-        if code == "invalid" and isinstance(exc, exceptions.ValidationError):
+        if code == "invalid":
             # Special handling for validation errors. Use `invalid_input` instead
             # of `invalid` to provide more clarity.
             return "invalid_input"
@@ -108,31 +103,21 @@ def _get_main_exception_and_code(exc) -> Tuple[str, Optional[str]]:
         return code
 
     # Get base exception codes from DRF (if exception is DRF)
-    if hasattr(exc, "get_codes"):
-        codes = exc.get_codes()
+    if exception_codes:
+        codes = exception_codes
 
         if isinstance(codes, str):
             # Only one exception, return
-            return (codes, None)
+            return codes, None
         elif isinstance(codes, dict):
             # If object is a dict or nested dict, return the key of the very first error
-            iterating_key = next(iter(codes))  # Get initial key
-            key = iterating_key
-            while isinstance(codes[iterating_key], dict):
-                codes = codes[iterating_key]
-                iterating_key = next(iter(codes))
-                key = f"{key}{api_settings.NESTED_KEY_SEPARATOR}{iterating_key}"
-            code = (
-                codes[iterating_key]
-                if isinstance(codes[iterating_key], str)
-                else codes[iterating_key][0]
-            )
-            return (override_or_return(code), key)
+            key = next(iter(codes))  # Get initial key
+            code = codes[key] if isinstance(codes[key], str) else codes[key][0]
+            return override_or_return(code), key
         elif isinstance(codes, list):
-            return (override_or_return(str(codes[0])), None)
+            return override_or_return(str(codes[0])), None
 
-    # TODO: Allow this default to be configured in settings
-    return ("error", None)
+    return "error", None
 
 
 @ensure_string
@@ -179,7 +164,7 @@ def exception_reporter(exc: BaseException, context: Optional[Dict] = None) -> No
 
 
 def exception_handler(
-    exc: BaseException, context: Optional[Dict] = None
+        exc: BaseException, context: Optional[Dict] = None
 ) -> Optional[Response]:
 
     # Special handling for Django base exceptions first
@@ -194,26 +179,40 @@ def exception_handler(
         )
 
     if (
-        getattr(settings, "DEBUG", False)
-        and not api_settings.ENABLE_IN_DEBUG
-        and not isinstance(exc, exceptions.APIException)
+            getattr(settings, "DEBUG", False)
+            and not api_settings.ENABLE_IN_DEBUG
+            and not isinstance(exc, exceptions.APIException)
     ):
         # By default don't handle non-DRF errors in DEBUG mode, i.e. Django will treat
         # unhandled exceptions regularly (very evident yellow error page)
         return None
-
-    exception_code, exception_key = _get_main_exception_and_code(exc)
-
+    if isinstance(exc, exceptions.ValidationError):
+        codes = exc.get_codes()
+        if type(codes) is list:
+            exception_list = [codes]
+        else:
+            codes = _normalize_exception_codes(codes).items()
+            exception_list = [{key: value} for key, value in codes]
+    elif hasattr(exc, "get_codes"):
+        exception_list = [exc.get_codes()]  # type: ignore
+    else:
+        exception_list = [None]
+    exception_list = [
+        _get_main_exception_and_code(exception) for exception in exception_list
+    ]
     api_settings.EXCEPTION_REPORTING(exc, context)
 
     set_rollback()
-
-    return Response(
+    response = [
         dict(
             type=_get_error_type(exc),
             code=exception_code,
             detail=_get_detail(exc, exception_key),
             attr=_get_attr(exc, exception_key),
-        ),
+        )
+        for exception_code, exception_key in exception_list
+    ]
+    return Response(
+        response if api_settings.INCLUDE_ALL_EXCEPTIONS else response[0],
         status=_get_http_status(exc),
     )
