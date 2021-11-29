@@ -74,10 +74,10 @@ def _normalize_exception_codes(
     exception_codes: Dict,
     parent_key: str = "",
     separator: str = api_settings.NESTED_KEY_SEPARATOR,
-) -> Dict:
+) -> Dict[str, str]:
     """
-    Returns a normalized dictionary of exception attributes and codes. Used for
-    multiple exceptions.
+    Returns a normalized one-level dictionary of exception attributes and codes. Used to
+    standardize multiple exceptions and complex nested exceptions.
     Example:
      => {
             'form__password': 'min_length',
