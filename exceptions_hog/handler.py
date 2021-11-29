@@ -28,6 +28,7 @@ class ErrorTypes(Enum):
     server_error = "server_error"
     throttled_error = "throttled_error"
     validation_error = "validation_error"
+    multiple_exceptions = "multiple"
 
 
 @ensure_string
@@ -70,9 +71,19 @@ def _get_error_type(exc) -> Union[str, ErrorTypes]:
 
 
 def _normalize_exception_codes(
-        exception_codes: Dict, parent_key: str = "",
-        separator: str = api_settings.NESTED_KEY_SEPARATOR,
+    exception_codes: Dict,
+    parent_key: str = "",
+    separator: str = api_settings.NESTED_KEY_SEPARATOR,
 ) -> Dict:
+    """
+    Returns a normalized dictionary of exception attributes and codes. Used for
+    multiple exceptions.
+    Example:
+     => {
+            'form__password': 'min_length',
+            'form__email': 'required'
+        }
+    """
     items: List = []
     for key, value in exception_codes.items():
         new_key = parent_key + separator + key if parent_key else key
@@ -164,7 +175,7 @@ def exception_reporter(exc: BaseException, context: Optional[Dict] = None) -> No
 
 
 def exception_handler(
-        exc: BaseException, context: Optional[Dict] = None
+    exc: BaseException, context: Optional[Dict] = None
 ) -> Optional[Response]:
 
     # Special handling for Django base exceptions first
@@ -179,13 +190,14 @@ def exception_handler(
         )
 
     if (
-            getattr(settings, "DEBUG", False)
-            and not api_settings.ENABLE_IN_DEBUG
-            and not isinstance(exc, exceptions.APIException)
+        getattr(settings, "DEBUG", False)
+        and not api_settings.ENABLE_IN_DEBUG
+        and not isinstance(exc, exceptions.APIException)
     ):
         # By default don't handle non-DRF errors in DEBUG mode, i.e. Django will treat
         # unhandled exceptions regularly (very evident yellow error page)
         return None
+
     if isinstance(exc, exceptions.ValidationError):
         codes = exc.get_codes()
         if type(codes) is list:
@@ -197,22 +209,37 @@ def exception_handler(
         exception_list = [exc.get_codes()]  # type: ignore
     else:
         exception_list = [None]
+
     exception_list = [
         _get_main_exception_and_code(exception) for exception in exception_list
     ]
+
     api_settings.EXCEPTION_REPORTING(exc, context)
 
     set_rollback()
-    response = [
-        dict(
-            type=_get_error_type(exc),
-            code=exception_code,
-            detail=_get_detail(exc, exception_key),
-            attr=_get_attr(exc, exception_key),
+
+    if api_settings.SUPPORT_MULTIPLE_EXCEPTIONS and len(exception_list) > 1:
+        response = dict(
+            type=ErrorTypes.multiple_exceptions.value,
+            code=ErrorTypes.multiple_exceptions.value,
+            detail="Multiple exceptions ocurred. Please check list for details.",
+            attr=None,
+            list=[
+                dict(
+                    type=_get_error_type(exc),
+                    code=exception_code,
+                    detail=_get_detail(exc, exception_key),
+                    attr=_get_attr(exc, exception_key),
+                )
+                for exception_code, exception_key in exception_list
+            ],
         )
-        for exception_code, exception_key in exception_list
-    ]
-    return Response(
-        response if api_settings.INCLUDE_ALL_EXCEPTIONS else response[0],
-        status=_get_http_status(exc),
-    )
+    else:
+        response = dict(
+            type=_get_error_type(exc),
+            code=exception_list[0][0],
+            detail=_get_detail(exc, exception_list[0][1]),
+            attr=_get_attr(exc, exception_list[0][1]),
+        )
+
+    return Response(response, status=_get_http_status(exc))

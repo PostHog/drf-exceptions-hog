@@ -60,19 +60,20 @@ REST_FRAMEWORK={
 ```
 
 Optionally set additional configuration for the package.
+
 ```python
 EXCEPTIONS_HOG = {
     "EXCEPTION_REPORTING": "exceptions_hog.handler.exception_reporter",
     "ENABLE_IN_DEBUG": False,
     "NESTED_KEY_SEPARATOR": "__",
-    "INCLUDE_ALL_EXCEPTIONS": False,
+    "SUPPORT_MULTIPLE_EXCEPTIONS": False,
 }
 ```
 
 - `EXCEPTION_REPORTING`: specify a method to call after an exception occurs. Particularly useful to report errors (e.g. through Sentry, NewRelic, ...). Default: `exceptions_hog.handler.exception_reporter`
 - `ENABLE_IN_DEBUG`: whether exceptions-hog should run when `DEBUG = 1`. It's useful to turn this off in debugging to get full error stack traces when developing. Defaut: `False`.
 - `NESTED_KEY_SEPARATOR`: customize the separator used for obtaining the `attr` name if the exception comes from nested objects (e.g. nested serializers). Default: `__`.
-- `INCLUDE_ALL_EXCEPTIONS`: defines whether exceptions-hog should return all errors as list or only one of them as dictionary. Default: False.
+- `SUPPORT_MULTIPLE_EXCEPTIONS`: whether exceptions-hog should return all exceptions in an error response. Useful particularly in form and serializer validation where multiple input exceptions can occur.
 
 ## 📑 Documentation
 
@@ -87,7 +88,8 @@ All responses handled by DRF Exceptions Hog have the following format:
   "type": "server_error",
   "code": "server_error",
   "detail": "Something went wrong.",
-  "attr": null
+  "attr": null,
+  "list": null
 }
 ```
 
@@ -99,6 +101,34 @@ where:
   - For security reasons (mainly to avoid leaking sensitive information) this attribute will return a generic error message for unhandled server exceptions, like an `ImportError`.
   - If you use Django localization, all our exception detail messages support using multiple languages.
 - `attr` will contain the name of the attribute to which the exception is related. Relevant mostly for `validation_error`s.
+- `list` will only be returned when [multiple exceptions](#multiple-exceptions) are enabled and the exception contains multiple exceptions (i.e. `type = multiple`).
+
+### Multiple exceptions
+
+There are some cases when handling multiple exceptions in a single response can be helpful. For instance, if you have a form with multiple fields, each field can have their own validations, and a user could benefit from knowing everything that is wrong in a single pass. You can enable multiple exception support by setting the `SUPPORT_MULTIPLE_EXCEPTIONS` setting to `True`. When it's enabled, if multiple exceptions are raised (e.g. by a serializer), you will receive a response like this:
+
+```json
+{
+  "type": "multiple",
+  "code": "multiple",
+  "detail": "Multiple exceptions ocurred. Please check list for details.",
+  "attr": null,
+  "list": [
+    {
+      "type": "validation_error",
+      "code": "required",
+      "detail": "This field is required.",
+      "attr": "email"
+    },
+    {
+      "type": "validation_error",
+      "code": "unsafe_password",
+      "detail": "This password is unsafe.",
+      "attr": "password"
+    }
+  ]
+}
+```
 
 ### Error types
 
@@ -106,6 +136,7 @@ Our package introduces the following general error types (but feel free to add c
 
 - `authentication_error` indicates there is an authentication-related problem with the request (e.g. no authentication credentials provided, invalid or expired credentials provided, credentials have insufficient privileges, etc.)
 - `invalid_request` indicates a general issue with the request that must be fixed by the client, excluding validation errors (e.g. request has an invalid media type format, request is malformed, etc.)
+- `multiple` indicates multiple exceptions ocurred (only if enabled). See [multiple exceptions](#multiple-exceptions) for details.
 - `server_error` indicates a generic internal server error that needs to be addressed on the server.
 - `throttled_error` indicates the request is throttled or rate limited and must be retried by the client at a later time.
 - `validation_error` indicates the request has not passed validation and must be fixed by the client (e.g. a required attribute was not provided, an incorrect data type was passed for an attribute, etc.)

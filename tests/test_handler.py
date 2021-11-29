@@ -290,13 +290,51 @@ def test_python_exception_with_enabled_in_debug(
     assert response.data == res_server_error
 
 
-# test list of all exceptions
+def test_list_response_validation_error_with_multiple_exceptions(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(api_settings, "SUPPORT_MULTIPLE_EXCEPTIONS", True)
+    response = exception_handler(
+        exceptions.ValidationError(
+            {
+                "email": ErrorDetail(string="This field is required.", code="required"),
+                "password": [
+                    ErrorDetail(
+                        string="This password is unsafe.",
+                        code="unsafe_password",
+                    )
+                ],
+            },
+        )
+    )
+    assert response is not None
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.data == {
+        "type": "multiple",
+        "code": "multiple",
+        "detail": "Multiple exceptions ocurred. Please check list for details.",
+        "attr": None,
+        "list": [
+            {
+                "type": "validation_error",
+                "code": "required",
+                "detail": "This field is required.",
+                "attr": "email",
+            },
+            {
+                "type": "validation_error",
+                "code": "unsafe_password",
+                "detail": "This password is unsafe.",
+                "attr": "password",
+            },
+        ],
+    }
 
 
 def test_list_response_validation_error_with_complex_nested_serializer_field(
-    res_server_error, settings, monkeypatch
+    monkeypatch,
 ) -> None:
-    monkeypatch.setattr(api_settings, "INCLUDE_ALL_EXCEPTIONS", True)
+    monkeypatch.setattr(api_settings, "SUPPORT_MULTIPLE_EXCEPTIONS", True)
     response = exception_handler(
         exceptions.ValidationError(
             {
@@ -327,23 +365,29 @@ def test_list_response_validation_error_with_complex_nested_serializer_field(
     )
     assert response is not None
     assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert response.data == [
-        {
-            "type": "validation_error",
-            "code": "focus",
-            "detail": "Focus on this error.",
-            "attr": "parent__l1_attr__l2_attr__l3_attr",
-        },
-        {
-            "type": "validation_error",
-            "code": "invalid_too",
-            "detail": "This field is also invalid.",
-            "attr": "parent__l1_attr__l2_attr_2__l3_attr_2",
-        },
-        {
-            "type": "validation_error",
-            "code": "invalid_too",
-            "detail": "This field is also invalid.",
-            "attr": "parent__l1_attr_2",
-        },
-    ]
+    assert response.data == {
+        "type": "multiple",
+        "code": "multiple",
+        "detail": "Multiple exceptions ocurred. Please check list for details.",
+        "attr": None,
+        "list": [
+            {
+                "type": "validation_error",
+                "code": "focus",
+                "detail": "Focus on this error.",
+                "attr": "parent__l1_attr__l2_attr__l3_attr",
+            },
+            {
+                "type": "validation_error",
+                "code": "invalid_too",
+                "detail": "This field is also invalid.",
+                "attr": "parent__l1_attr__l2_attr_2__l3_attr_2",
+            },
+            {
+                "type": "validation_error",
+                "code": "invalid_too",
+                "detail": "This field is also invalid.",
+                "attr": "parent__l1_attr_2",
+            },
+        ],
+    }
