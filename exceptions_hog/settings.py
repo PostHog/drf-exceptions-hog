@@ -9,6 +9,7 @@ DEFAULTS: Dict = {
     "EXCEPTION_REPORTING": "exceptions_hog.handler.exception_reporter",
     "ENABLE_IN_DEBUG": False,
     "NESTED_KEY_SEPARATOR": "__",
+    "SUPPORT_MULTIPLE_EXCEPTIONS": False,
 }
 
 # List of settings that may be in string import notation.

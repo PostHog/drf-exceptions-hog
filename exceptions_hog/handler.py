@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
@@ -28,6 +28,7 @@ class ErrorTypes(Enum):
     server_error = "server_error"
     throttled_error = "throttled_error"
     validation_error = "validation_error"
+    multiple_exceptions = "multiple"
 
 
 @ensure_string
@@ -69,17 +70,43 @@ def _get_error_type(exc) -> Union[str, ErrorTypes]:
     return ErrorTypes.server_error
 
 
-def _get_main_exception_and_code(exc) -> Tuple[str, Optional[str]]:
+def _normalize_exception_codes(
+    exception_codes: Dict,
+    parent_key: str = "",
+    separator: str = api_settings.NESTED_KEY_SEPARATOR,
+) -> Dict[str, str]:
     """
-    Finds the main exception when there are multiple exceptions (e.g. when two inputs are
-    failing validation), and returns the exception key and the computed exception code.
+    Returns a normalized one-level dictionary of exception attributes and codes. Used to
+    standardize multiple exceptions and complex nested exceptions.
+    Example:
+     => {
+            'form__password': 'min_length',
+            'form__email': 'required'
+        }
     """
+    items: List = []
+    for key, value in exception_codes.items():
+        new_key = parent_key + separator + key if parent_key else key
 
+        if isinstance(value, dict):
+            items.extend(
+                _normalize_exception_codes(
+                    value.copy(),
+                    new_key,
+                    separator=separator,
+                ).items()
+            )
+        else:
+            items.append((new_key, value))
+    return dict(items)
+
+
+def _get_main_exception_and_code(exception_codes: Dict) -> Tuple[str, Optional[str]]:
     def override_or_return(code: str) -> str:
         """
         Returns overridden code if needs to change or provided code.
         """
-        if code == "invalid" and isinstance(exc, exceptions.ValidationError):
+        if code == "invalid":
             # Special handling for validation errors. Use `invalid_input` instead
             # of `invalid` to provide more clarity.
             return "invalid_input"
@@ -87,31 +114,21 @@ def _get_main_exception_and_code(exc) -> Tuple[str, Optional[str]]:
         return code
 
     # Get base exception codes from DRF (if exception is DRF)
-    if hasattr(exc, "get_codes"):
-        codes = exc.get_codes()
+    if exception_codes:
+        codes = exception_codes
 
         if isinstance(codes, str):
             # Only one exception, return
-            return (codes, None)
+            return codes, None
         elif isinstance(codes, dict):
             # If object is a dict or nested dict, return the key of the very first error
-            iterating_key = next(iter(codes))  # Get initial key
-            key = iterating_key
-            while isinstance(codes[iterating_key], dict):
-                codes = codes[iterating_key]
-                iterating_key = next(iter(codes))
-                key = f"{key}{api_settings.NESTED_KEY_SEPARATOR}{iterating_key}"
-            code = (
-                codes[iterating_key]
-                if isinstance(codes[iterating_key], str)
-                else codes[iterating_key][0]
-            )
-            return (override_or_return(code), key)
+            key = next(iter(codes))  # Get initial key
+            code = codes[key] if isinstance(codes[key], str) else codes[key][0]
+            return override_or_return(code), key
         elif isinstance(codes, list):
-            return (override_or_return(str(codes[0])), None)
+            return override_or_return(str(codes[0])), None
 
-    # TODO: Allow this default to be configured in settings
-    return ("error", None)
+    return "error", None
 
 
 @ensure_string
@@ -181,18 +198,48 @@ def exception_handler(
         # unhandled exceptions regularly (very evident yellow error page)
         return None
 
-    exception_code, exception_key = _get_main_exception_and_code(exc)
+    if isinstance(exc, exceptions.ValidationError):
+        codes = exc.get_codes()
+        if type(codes) is list:
+            exception_list = [codes]
+        else:
+            codes = _normalize_exception_codes(codes).items()
+            exception_list = [{key: value} for key, value in codes]
+    elif hasattr(exc, "get_codes"):
+        exception_list = [exc.get_codes()]  # type: ignore
+    else:
+        exception_list = [None]
+
+    exception_list = [
+        _get_main_exception_and_code(exception) for exception in exception_list
+    ]
 
     api_settings.EXCEPTION_REPORTING(exc, context)
 
     set_rollback()
 
-    return Response(
-        dict(
+    if api_settings.SUPPORT_MULTIPLE_EXCEPTIONS and len(exception_list) > 1:
+        response = dict(
+            type=ErrorTypes.multiple_exceptions.value,
+            code=ErrorTypes.multiple_exceptions.value,
+            detail="Multiple exceptions ocurred. Please check list for details.",
+            attr=None,
+            list=[
+                dict(
+                    type=_get_error_type(exc),
+                    code=exception_code,
+                    detail=_get_detail(exc, exception_key),
+                    attr=_get_attr(exc, exception_key),
+                )
+                for exception_code, exception_key in exception_list
+            ],
+        )
+    else:
+        response = dict(
             type=_get_error_type(exc),
-            code=exception_code,
-            detail=_get_detail(exc, exception_key),
-            attr=_get_attr(exc, exception_key),
-        ),
-        status=_get_http_status(exc),
-    )
+            code=exception_list[0][0],
+            detail=_get_detail(exc, exception_list[0][1]),
+            attr=_get_attr(exc, exception_list[0][1]),
+        )
+
+    return Response(response, status=_get_http_status(exc))
