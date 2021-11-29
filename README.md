@@ -171,6 +171,10 @@ To run a local copy of the package for development, please follow these instruct
 
 1. Start coding!
 
+## 🧱 Requirements
+
+- This package requires at least Python 3.7 & Django 3.2
+
 ## 👨‍⚖️ License
 
 We ♥ Open Source! This repository is MIT licensed by PostHog. Full license [here](LICENSE).
