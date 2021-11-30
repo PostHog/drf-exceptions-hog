@@ -1,0 +1,70 @@
+name: Bump version
+
+on:
+  pull_request
+  #types: [closed]
+
+jobs:
+  label-version-bump:
+    name: Bump version based on PR label
+    runs-on: ubuntu-20.04
+    if: |
+      true
+      && (
+          contains(github.event.pull_request.labels.*.name, 'bump patch')
+          || contains(github.event.pull_request.labels.*.name, 'bump minor')
+          || contains(github.event.pull_request.labels.*.name, 'bump major')
+      )
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Detect version bump type
+        id: bump-type
+        run: |
+          BUMP_TYPE=null
+          if [[ $BUMP_PATCH_PRESENT == 'true' ]]; then
+              BUMP_TYPE=patch
+          fi
+          if [[ $BUMP_MINOR_PRESENT == 'true' ]]; then
+              BUMP_TYPE=minor
+          fi
+          if [[ $BUMP_MAJOR_PRESENT == 'true' ]]; then
+              BUMP_TYPE=major
+          fi
+          echo "::set-output name=bump-type::$BUMP_TYPE"
+        env:
+          BUMP_PATCH_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'bump patch') }}
+          BUMP_MINOR_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'bump minor') }}
+          BUMP_MAJOR_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'bump major') }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install --upgrade bumpversion
+
+      - name: Bump version
+        if: steps.bump-type.outputs.bump-type != 'null'
+        run: bumpversion ${{ steps.bump-type.outputs.bump-type }} exceptions_hog/version.py
+
+      - name: Create bump pull request
+        id: create-pr
+        uses: peter-evans/create-pull-request@v3
+        with:
+          token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+          commit-message: Bump drf-exceptions-hog version
+          delete-branch: true
+          labels: |
+            automerge
+            trigger-release
+          title: Bump drf-exceptions-hog version
+          body: |
+            ## Changes
+            Bumps the package version.
+      - name: Output pull request result
+        run: |
+          echo "Pull request ready: ${{ steps.create-pr.outputs.pull-request-url }}"
