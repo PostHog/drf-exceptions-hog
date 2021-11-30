@@ -197,6 +197,16 @@ def exception_handler(
     ):
         # By default don't handle non-DRF errors in DEBUG mode, i.e. Django will treat
         # unhandled exceptions regularly (very evident yellow error page)
+
+        # NOTE: to make sure we get exception tracebacks in test responses, we need
+        # to make sure this signal is called. The django test client uses this to
+        # pull out the exception traceback.
+        #
+        # See https://github.com/django/django/blob/master/django/test/client.py#L714
+        got_request_exception.send(
+            sender=None,
+            request=context["request"] if context and "request" in context else None,
+        )
         return None
 
     if isinstance(exc, exceptions.ValidationError):
@@ -216,15 +226,6 @@ def exception_handler(
     ]
 
     api_settings.EXCEPTION_REPORTING(exc, context)
-
-    # NOTE: to make sure we get exception tracebacks in test responses, we need
-    # to make sure this signal is called. The django test client uses this to
-    # pull out the exception traceback.
-    #
-    # See https://github.com/django/django/blob/master/django/test/client.py#L714
-    got_request_exception.send(
-        sender=None, request=context["request"] if "request" in context else None
-    )
 
     set_rollback()
 
