@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        django-version: ["Django==3.2.10", "Django==3.1.13"]
+        django-version: ["Django==3.2.9", "Django==3.1.13"]
         python-version: [3.7, 3.8, 3.9]
     steps:
       - uses: actions/checkout@v2
