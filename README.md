@@ -173,7 +173,9 @@ To run a local copy of the package for development, please follow these instruct
 
 ## 🧱 Requirements
 
-- This package requires at least Python 3.7 & Django 3.2
+- This package requires at least Python 3.7 & Django 3.1
+- Supported Python versions: 3.7.x, 3.8.x & 3.9.x
+- Supported Django versions: 3.1.x & 3.2.x
 
 ## 👨‍⚖️ License
 
