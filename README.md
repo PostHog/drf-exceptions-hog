@@ -1,3 +1,5 @@
+<img src="drf-exceptions-hog.png" alt="Logo" height="125" />
+
 # DRF Exceptions Hog
 
 Standardized and **easy-to-parse** API error responses for [Django REST Framework][drf].
