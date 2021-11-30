@@ -1,8 +1,8 @@
 name: Bump version & release
 
 on:
-  pull_request
-  # types: [closed]
+  pull_request:
+    types: [closed]
 
 jobs:
   label-version-bump:
@@ -10,10 +10,9 @@ jobs:
     runs-on: ubuntu-20.04
     env:
       TWINE_USERNAME: __token__
-      TWINE_PASSWORD: __password__
-      # TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+      TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
     if: |
-      true
+      github.event.pull_request.merged
       && (
           contains(github.event.pull_request.labels.*.name, 'bump patch')
           || contains(github.event.pull_request.labels.*.name, 'bump minor')
@@ -23,7 +22,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v2
         with:
-          # ref: ${{ github.event.pull_request.base.ref }}
+          ref: ${{ github.event.pull_request.base.ref }}
           token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
           fetch-depth: 0
 
@@ -67,17 +66,16 @@ jobs:
           cat exceptions_hog/version.py
           cat setup.cfg
 
-      # - name: Commit bump
-      #   if: steps.bump-type.outputs.bump-type != 'null'
-      #   uses: EndBug/add-and-commit@v7
-      #   with:
-      #     branch: ${{ github.event.pull_request.base.ref }}
-      #     message: Bump version to ${{ steps.versions.outputs.new-version }}, update changelog
-      #     github_token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+      - name: Commit bump
+        if: steps.bump-type.outputs.bump-type != 'null'
+        uses: EndBug/add-and-commit@v7
+        with:
+          branch: ${{ github.event.pull_request.base.ref }}
+          message: Bump version and update changelog
+          github_token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
 
       - name: Build release
         run: python setup.py sdist bdist_wheel
 
       - name: Publish release
-        run: echo "2"
-        # run: twine upload dist/*
+        run: twine upload dist/*
