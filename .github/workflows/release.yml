@@ -1,4 +1,4 @@
-name: Bumo version & release
+name: Bump version & release
 
 on:
   pull_request
@@ -46,21 +46,15 @@ jobs:
           BUMP_MINOR_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'bump minor') }}
           BUMP_MAJOR_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'bump major') }}
 
-      - name: Determine new version
-        id: versions
-        if: steps.bump-type.outputs.bump-type != 'null'
+      - name: Install build & release dependencies
         run: |
-          OLD_VERSION=$(jq ".version" package.json -r)
-          NEW_VERSION=$(npx semver $OLD_VERSION -i ${{ steps.bump-type.outputs.bump-type }})
-          echo "::set-output name=old-version::$OLD_VERSION"
-          echo "::set-output name=new-version::$NEW_VERSION"
+          pip install -U pip setuptools wheel twine
+          pip install bumpversion
 
-      - name: Update version in package.json
+      - name: Bump version
         if: steps.bump-type.outputs.bump-type != 'null'
         run: |
-          mv package.json package.old.json
-          jq --indent 4 '.version = "${{ steps.versions.outputs.new-version }}"' package.old.json > package.json
-          rm package.old.json
+          bumpversion ${{ steps.bump-type.outputs.bump-type }} exceptions_hog/version.py
 
       - name: Update changelog
         run: |
@@ -71,6 +65,7 @@ jobs:
           rm CHANGELOG.old.md
           cat CHANGELOG.md
           cat version.py
+          cat setup.cfg
 
       # - name: Commit bump
       #   if: steps.bump-type.outputs.bump-type != 'null'
@@ -80,11 +75,8 @@ jobs:
       #     message: Bump version to ${{ steps.versions.outputs.new-version }}, update changelog
       #     github_token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
 
-      - name: Install build & release dependencies
-        run: pip install -U pip setuptools wheel twine
-
       - name: Build release
         run: python setup.py sdist bdist_wheel
 
       - name: Publish release
-        run: twine upload dist/*
+        # run: twine upload dist/*
