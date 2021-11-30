@@ -1,49 +1,24 @@
-name: Bump version & release
+name: Release new version
 
 on:
   pull_request:
     types: [closed]
 
 jobs:
-  label-version-bump:
-    name: Bump version based on PR label
+  release:
+    name: Release new version
     runs-on: ubuntu-20.04
     env:
       TWINE_USERNAME: __token__
       TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
     if: |
       github.event.pull_request.merged
-      && (
-          contains(github.event.pull_request.labels.*.name, 'bump patch')
-          || contains(github.event.pull_request.labels.*.name, 'bump minor')
-          || contains(github.event.pull_request.labels.*.name, 'bump major')
-      )
+      && contains(github.event.pull_request.labels.*.name, 'trigger-release')
     steps:
       - name: Check out repository
         uses: actions/checkout@v2
         with:
           ref: ${{ github.event.pull_request.base.ref }}
-          token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
-          fetch-depth: 0
-
-      - name: Detect version bump type
-        id: bump-type
-        run: |
-          BUMP_TYPE=null
-          if [[ $BUMP_PATCH_PRESENT == 'true' ]]; then
-              BUMP_TYPE=patch
-          fi
-          if [[ $BUMP_MINOR_PRESENT == 'true' ]]; then
-              BUMP_TYPE=minor
-          fi
-          if [[ $BUMP_MAJOR_PRESENT == 'true' ]]; then
-              BUMP_TYPE=major
-          fi
-          echo "::set-output name=bump-type::$BUMP_TYPE"
-        env:
-          BUMP_PATCH_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'bump patch') }}
-          BUMP_MINOR_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'bump minor') }}
-          BUMP_MAJOR_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'bump major') }}
 
       - name: Install build & release dependencies
         run: |
