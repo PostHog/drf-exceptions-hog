@@ -79,4 +79,5 @@ jobs:
         run: python setup.py sdist bdist_wheel
 
       - name: Publish release
+        run: echo "1"
         # run: twine upload dist/*
