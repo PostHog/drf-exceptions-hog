@@ -2,7 +2,7 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import ProtectedError
 from django.http import Http404
 from rest_framework import exceptions, status
-from rest_framework.exceptions import ErrorDetail
+from rest_framework.exceptions import ErrorDetail, ValidationError
 
 from exceptions_hog.handler import exception_handler
 from exceptions_hog.settings import api_settings
@@ -200,6 +200,22 @@ def test_protected_error() -> None:
         "code": "protected_error",
         "detail": "Requested operation cannot be completed because"
         " a related object is protected.",
+        "attr": None,
+    }
+
+
+def test_unique_together_exception() -> None:
+    response = exception_handler(
+        ValidationError(
+            {"__all__": ["User with this name and email already exists."]},
+            code="unique_together",
+        )
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.data == {
+        "type": "validation_error",
+        "code": "unique_together",
+        "detail": "User with this name and email already exists.",
         "attr": None,
     }
 
