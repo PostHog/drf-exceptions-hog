@@ -1,8 +1,8 @@
 name: Bump version
 
 on:
-  pull_request
-  # types: [closed]
+  pull_request:
+    types: [closed]
 
 jobs:
   label-version-bump:
@@ -52,7 +52,7 @@ jobs:
         if: steps.bump-type.outputs.bump-type != 'null'
         run: |
           NEW_VERSION=$(bumpversion ${{ steps.bump-type.outputs.bump-type }} exceptions_hog/version.py --list | grep new_version)
-          echo "::set-output name=new::${NEW_VERSION//new-version=}"
+          echo "::set-output name=new::${NEW_VERSION//new_version=}"
 
       - name: Create bump pull request
         id: create-pr
