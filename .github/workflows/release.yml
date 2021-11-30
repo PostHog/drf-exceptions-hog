@@ -55,6 +55,8 @@ jobs:
       - name: Bump version
         if: steps.bump-type.outputs.bump-type != 'null'
         run: |
+          cat exceptions_hog/version.py
+          cat setup.cfg
           bumpversion ${{ steps.bump-type.outputs.bump-type }} exceptions_hog/version.py
 
       - name: Update changelog
@@ -65,7 +67,7 @@ jobs:
           echo -e "$CHANGELOG_HEADING\n\n$CHANGELOG_POINTS\n\n$(cat CHANGELOG.old.md)" > CHANGELOG.md
           rm CHANGELOG.old.md
           cat CHANGELOG.md
-          cat version.py
+          cat exceptions_hog/version.py
           cat setup.cfg
 
       # - name: Commit bump
