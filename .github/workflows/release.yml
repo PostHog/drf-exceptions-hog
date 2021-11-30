@@ -55,7 +55,6 @@ jobs:
       - name: Bump version
         if: steps.bump-type.outputs.bump-type != 'null'
         run: |
-          cat exceptions_hog/version.py
           cat setup.cfg
           bumpversion ${{ steps.bump-type.outputs.bump-type }} exceptions_hog/version.py
 
