@@ -1,8 +1,8 @@
-name: Bump version 2
+name: Bump version
 
 on:
-  pull_request
-  #types: [closed]
+  pull_request:
+    types: [closed]
 
 jobs:
   label-version-bump:
