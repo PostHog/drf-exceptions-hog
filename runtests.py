@@ -3,10 +3,11 @@ Forked from https://github.com/encode/django-rest-framework
 """
 import subprocess
 import sys
+from typing import Any, Dict
 
 import pytest
 
-PYTEST_ARGS = {
+PYTEST_ARGS: Dict[str, Any] = {
     "default": [],
 }
 
