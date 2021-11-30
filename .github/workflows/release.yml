@@ -48,8 +48,9 @@ jobs:
 
       - name: Install build & release dependencies
         run: |
+          pip install --upgrade pip
+          pip install --upgrade bumpversion
           pip install -U pip setuptools wheel twine
-          pip install bumpversion
 
       - name: Bump version
         if: steps.bump-type.outputs.bump-type != 'null'
