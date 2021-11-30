@@ -3,6 +3,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
+from django.core.signals import got_request_exception
 from django.db.models import ProtectedError
 from django.http import Http404
 from django.utils.translation import gettext as _
@@ -215,6 +216,15 @@ def exception_handler(
     ]
 
     api_settings.EXCEPTION_REPORTING(exc, context)
+
+    # NOTE: to make sure we get exception tracebacks in test responses, we need
+    # to make sure this signal is called. The django test client uses this to
+    # pull out the exception traceback.
+    #
+    # See https://github.com/django/django/blob/master/django/test/client.py#L714
+    got_request_exception.send(
+        sender=None, request=context["request"] if "request" in context else None
+    )
 
     set_rollback()
 
