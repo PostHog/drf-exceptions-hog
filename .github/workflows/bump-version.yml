@@ -51,9 +51,8 @@ jobs:
         id: version
         if: steps.bump-type.outputs.bump-type != 'null'
         run: |
-          NEW_VERSION_KEY=$(bumpversion ${{ steps.bump-type.outputs.bump-type }} exceptions_hog/version.py --list | grep new_version)
-          NEW_VERSION=${NEW_VERSION_KEY//new-version=}
-          echo "::set-output name=new::$NEW_VERSION"
+          NEW_VERSION=$(bumpversion ${{ steps.bump-type.outputs.bump-type }} exceptions_hog/version.py --list | grep new_version)
+          echo "::set-output name=new::${NEW_VERSION//new-version=}"
 
       - name: Create bump pull request
         id: create-pr
