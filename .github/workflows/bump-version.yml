@@ -1,8 +1,8 @@
 name: Bump version
 
 on:
-  pull_request:
-    types: [closed]
+  pull_request
+  # types: [closed]
 
 jobs:
   label-version-bump:
@@ -48,23 +48,28 @@ jobs:
           pip install --upgrade bumpversion
 
       - name: Bump version
+        id: version
         if: steps.bump-type.outputs.bump-type != 'null'
-        run: bumpversion ${{ steps.bump-type.outputs.bump-type }} exceptions_hog/version.py
+        run: |
+          NEW_VERSION_KEY=$(bumpversion ${{ steps.bump-type.outputs.bump-type }} exceptions_hog/version.py --list | grep new_version)
+          NEW_VERSION=${NEW_VERSION_KEY//new-version=}
+          echo "::set-output name=new::$NEW_VERSION"
 
       - name: Create bump pull request
         id: create-pr
         uses: peter-evans/create-pull-request@v3
         with:
           token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
-          commit-message: Bump drf-exceptions-hog version
+          commit-message: Bump drf-exceptions-hog to ${{ steps.version.outputs.new }}
+          branch: bump-${{ steps.version.outputs.new }}
           delete-branch: true
           labels: |
             automerge
             trigger-release
-          title: Bump drf-exceptions-hog version
+          title: Bump drf-exceptions-hog to ${{ steps.version.outputs.new }}
           body: |
             ## Changes
-            Bumps the package version.
+            Bumps the package version to ${{ steps.version.outputs.new }} (${{ steps.bump-type.outputs.bump-type }} bump).
       - name: Output pull request result
         run: |
           echo "Pull request ready: ${{ steps.create-pr.outputs.pull-request-url }}"
