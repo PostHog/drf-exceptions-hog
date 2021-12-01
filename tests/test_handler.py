@@ -250,6 +250,52 @@ def test_unique_together_exception() -> None:
     }
 
 
+def test_non_field_errors_exception() -> None:
+    """
+    Asserts special handling of non_field_errors exceptions.
+    https://www.django-rest-framework.org/api-guide/settings/#non_field_errors_key
+    """
+    response = exception_handler(
+        ValidationError(
+            {"non_field_errors": ["This form is invalid."]},
+        )
+    )
+    assert response is not None
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.data == {
+        "type": "validation_error",
+        "code": "invalid_input",
+        "detail": "This form is invalid.",
+        "attr": None,
+    }
+
+
+def test_non_field_errors_exception_with_custom_key(settings) -> None:
+    """
+    Asserts special handling of non_field_errors exceptions.
+    https://www.django-rest-framework.org/api-guide/settings/#non_field_errors_key
+    """
+
+    settings.REST_FRAMEWORK = {
+        **settings.REST_FRAMEWORK,
+        "NON_FIELD_ERRORS_KEY": "my_custom_error_key",
+    }
+
+    response = exception_handler(
+        ValidationError(
+            {"my_custom_error_key": ["This form is invalid."]},
+        )
+    )
+    assert response is not None
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.data == {
+        "type": "validation_error",
+        "code": "invalid_input",
+        "detail": "This form is invalid.",
+        "attr": None,
+    }
+
+
 # Python exceptions
 
 

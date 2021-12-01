@@ -8,6 +8,7 @@ from django.http import Http404
 from django.utils.translation import gettext as _
 from rest_framework import exceptions, status
 from rest_framework.response import Response
+from rest_framework.settings import api_settings as drf_api_settings
 from rest_framework.views import set_rollback
 
 from .exceptions import ProtectedObjectException
@@ -173,9 +174,7 @@ def _get_detail(exc, exception_key: Union[str, List[str]] = "") -> str:
     return DEFAULT_ERROR_DETAIL
 
 
-def _get_attr(
-    exc: BaseException, exception_key: Optional[Union[str, List[str]]] = None
-) -> Optional[str]:
+def _get_attr(exception_key: Optional[Union[str, List[str]]] = None) -> Optional[str]:
     """
     Returns the offending attribute name. Handles special case
         of __all__ (used for instance in UniqueTogetherValidator) to return `None`.
@@ -186,6 +185,9 @@ def _get_attr(
         Returns overridden code if needs to change or provided code.
         """
         if final_key == "__all__":
+            return None
+
+        if final_key == drf_api_settings.NON_FIELD_ERRORS_KEY:
             return None
 
         return final_key if final_key else None
@@ -268,7 +270,7 @@ def exception_handler(
                     type=_get_error_type(exc),
                     code=exception_code,
                     detail=_get_detail(exc, exception_key),
-                    attr=_get_attr(exc, exception_key),
+                    attr=_get_attr(exception_key),
                 )
                 for exception_code, exception_key in exception_list
             ],
@@ -278,7 +280,7 @@ def exception_handler(
             type=_get_error_type(exc),
             code=exception_list[0][0],
             detail=_get_detail(exc, exception_list[0][1]),
-            attr=_get_attr(exc, exception_list[0][1]),
+            attr=_get_attr(exception_list[0][1]),
         )
 
     return Response(response, status=_get_http_status(exc))
