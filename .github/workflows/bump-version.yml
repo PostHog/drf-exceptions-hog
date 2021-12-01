@@ -63,7 +63,6 @@ jobs:
           branch: bump-${{ steps.version.outputs.new }}
           delete-branch: true
           labels: |
-            automerge
             trigger-release
           title: Bump drf-exceptions-hog to ${{ steps.version.outputs.new }}
           body: |
