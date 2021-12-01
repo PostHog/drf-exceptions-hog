@@ -164,8 +164,9 @@ def _get_detail(exc, exception_key: Union[str, List[str]] = "") -> str:
             value = exc.detail
 
             # Handle nested attributes
-            for key in exception_key:
-                value = value[key]
+            if isinstance(exception_key, list):
+                for key in exception_key:
+                    value = value[key]
 
             return str(value if isinstance(value, str) else value[0])
         elif isinstance(exc.detail, list) and len(exc.detail) > 0:
