@@ -202,7 +202,7 @@ def exception_handler(
         # to make sure this signal is called. The django test client uses this to
         # pull out the exception traceback.
         #
-        # See https://github.com/django/django/blob/master/django/test/client.py#L714
+        # See https://github.com/django/django/blob/3.2.9/django/test/client.py#L712
         got_request_exception.send(
             sender=None,
             request=context["request"] if context and "request" in context else None,
