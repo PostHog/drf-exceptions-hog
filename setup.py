@@ -2,8 +2,10 @@ from importlib.machinery import SourceFileLoader
 
 from setuptools import find_packages, setup
 
-version = SourceFileLoader("version", "exceptions_hog/version.py").load_module()
-
+version_module = SourceFileLoader("version", "exceptions_hog/version.py").load_module(
+    "version"
+)
+__version__ = version_module.__version__  # type: ignore
 
 with open("README.md", "r") as f:
     long_description = f.read()
@@ -11,7 +13,7 @@ with open("README.md", "r") as f:
 
 setup(
     name="drf-exceptions-hog",
-    version=version.__version__,
+    version=__version__,
     author="PostHog",
     author_email="hey@posthog.com",
     description="Standardized and easy-to-parse API error responses for DRF.",

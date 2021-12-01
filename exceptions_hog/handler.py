@@ -9,6 +9,7 @@ from django.http import Http404
 from django.utils.translation import gettext as _
 from rest_framework import exceptions, status
 from rest_framework.response import Response
+from rest_framework.settings import api_settings as drf_api_settings
 from rest_framework.views import set_rollback
 
 from .exceptions import ProtectedObjectException
@@ -67,42 +68,48 @@ def _get_error_type(exc) -> Union[str, ErrorTypes]:
         return ErrorTypes.validation_error
 
     # Couldn't determine type, default to generic error
-    # TODO: Allow this default to be configured in settings
     return ErrorTypes.server_error
 
 
 def _normalize_exception_codes(
     exception_codes: Dict,
-    parent_key: str = "",
-    separator: str = api_settings.NESTED_KEY_SEPARATOR,
-) -> Dict[str, str]:
+    parent_key: List[str] = [],
+) -> List[Dict[str, Union[str, List[str]]]]:
     """
     Returns a normalized one-level dictionary of exception attributes and codes. Used to
     standardize multiple exceptions and complex nested exceptions.
     Example:
-     => {
-            'form__password': 'min_length',
-            'form__email': 'required'
-        }
+     => [
+         {
+             "parsed_keys": ["form", "password"],
+             "exception_code": ["required"]
+         },
+         {
+             "parsed_keys": ["form", "password"],
+             "exception_code": "min_length"
+         }
+     ]
     """
     items: List = []
-    for key, value in exception_codes.items():
-        new_key = parent_key + separator + key if parent_key else key
+    for key, exception_code in exception_codes.items():
 
-        if isinstance(value, dict):
+        keys: List[str] = parent_key + [key]
+
+        if isinstance(exception_code, dict):
             items.extend(
                 _normalize_exception_codes(
-                    value.copy(),
-                    new_key,
-                    separator=separator,
-                ).items()
+                    exception_code.copy(),
+                    keys,
+                )
             )
         else:
-            items.append((new_key, value))
-    return dict(items)
+            items.append({"parsed_keys": keys, "exception_code": exception_code})
+    return items
 
 
-def _get_main_exception_and_code(exception_codes: Dict) -> Tuple[str, Optional[str]]:
+def _get_main_exception_and_code(
+    exception_codes: Union[Dict, str, List]
+) -> Tuple[str, Optional[str]]:
     def override_or_return(code: str) -> str:
         """
         Returns overridden code if needs to change or provided code.
@@ -117,6 +124,15 @@ def _get_main_exception_and_code(exception_codes: Dict) -> Tuple[str, Optional[s
     # Get base exception codes from DRF (if exception is DRF)
     if exception_codes:
         codes = exception_codes
+
+        if isinstance(codes, dict) and "parsed_keys" in codes:
+            # Handling for parsed nested attributes (see `_normalize_exception_codes`)
+            code = (
+                codes["exception_code"][0]
+                if isinstance(codes["exception_code"], list)
+                else codes["exception_code"]
+            )
+            return override_or_return(str(code)), codes["parsed_keys"]
 
         if isinstance(codes, str):
             # Only one exception, return
@@ -133,7 +149,10 @@ def _get_main_exception_and_code(exception_codes: Dict) -> Tuple[str, Optional[s
 
 
 @ensure_string
-def _get_detail(exc, exception_key: str = "") -> str:
+def _get_detail(exc, exception_key: Union[str, List[str]] = "") -> str:
+    """
+    Returns the human-friendly detail text for a specific insight exception.
+    """
 
     if hasattr(exc, "detail"):
         # Get exception details if explicitly set. We don't obtain exception information
@@ -144,8 +163,12 @@ def _get_detail(exc, exception_key: str = "") -> str:
             )  # We do str() to get the actual error string on ErrorDetail instances
         elif isinstance(exc.detail, dict):
             value = exc.detail
-            for key in exception_key.split(api_settings.NESTED_KEY_SEPARATOR):
-                value = value[key]
+
+            # Handle nested attributes
+            if isinstance(exception_key, list):
+                for key in exception_key:
+                    value = value[key]
+
             return str(value if isinstance(value, str) else value[0])
         elif isinstance(exc.detail, list) and len(exc.detail) > 0:
             return exc.detail[0]
@@ -153,8 +176,28 @@ def _get_detail(exc, exception_key: str = "") -> str:
     return DEFAULT_ERROR_DETAIL
 
 
-def _get_attr(exc: BaseException, exception_key: Optional[str] = "") -> Optional[str]:
-    return exception_key if exception_key else None
+def _get_attr(exception_key: Optional[Union[str, List[str]]] = None) -> Optional[str]:
+    """
+    Returns the offending attribute name. Handles special case
+        of __all__ (used for instance in UniqueTogetherValidator) to return `None`.
+    """
+
+    def override_or_return(final_key: Optional[str]) -> Optional[str]:
+        """
+        Returns overridden code if needs to change or provided code.
+        """
+        if final_key == "__all__":
+            return None
+
+        if final_key == drf_api_settings.NON_FIELD_ERRORS_KEY:
+            return None
+
+        return final_key if final_key else None
+
+    if isinstance(exception_key, list):
+        return override_or_return(api_settings.NESTED_KEY_SEPARATOR.join(exception_key))
+
+    return override_or_return(exception_key)
 
 
 def _get_http_status(exc) -> int:
@@ -214,8 +257,7 @@ def exception_handler(
         if type(codes) is list:
             exception_list = [codes]
         else:
-            codes = _normalize_exception_codes(codes).items()
-            exception_list = [{key: value} for key, value in codes]
+            exception_list = _normalize_exception_codes(codes)
     elif hasattr(exc, "get_codes"):
         exception_list = [exc.get_codes()]  # type: ignore
     else:
@@ -240,7 +282,7 @@ def exception_handler(
                     type=_get_error_type(exc),
                     code=exception_code,
                     detail=_get_detail(exc, exception_key),
-                    attr=_get_attr(exc, exception_key),
+                    attr=_get_attr(exception_key),
                 )
                 for exception_code, exception_key in exception_list
             ],
@@ -250,7 +292,7 @@ def exception_handler(
             type=_get_error_type(exc),
             code=exception_list[0][0],
             detail=_get_detail(exc, exception_list[0][1]),
-            attr=_get_attr(exc, exception_list[0][1]),
+            attr=_get_attr(exception_list[0][1]),
         )
 
     return Response(response, status=_get_http_status(exc))

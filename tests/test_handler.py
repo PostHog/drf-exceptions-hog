@@ -4,7 +4,7 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import ProtectedError
 from django.http import Http404
 from rest_framework import exceptions, status
-from rest_framework.exceptions import ErrorDetail
+from rest_framework.exceptions import ErrorDetail, ValidationError
 
 from exceptions_hog.handler import exception_handler
 from exceptions_hog.settings import api_settings
@@ -162,6 +162,32 @@ def test_validation_error_with_complex_nested_serializer_field() -> None:
     }
 
 
+def test_nested_serializer_field_with_special_characters() -> None:
+    """
+    Tests proper handling of the edge case of an attribute name using the same characters
+    as the `NESTED_KEY_SEPARATOR`.
+    """
+    response = exception_handler(
+        exceptions.ValidationError(
+            {
+                "my__special___attribute": {
+                    "children_attr": [
+                        ErrorDetail(string="This field is required.", code="required")
+                    ],
+                }
+            }
+        )
+    )
+    assert response is not None
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.data == {
+        "type": "validation_error",
+        "code": "required",
+        "detail": "This field is required.",
+        "attr": "my__special___attribute__children_attr",
+    }
+
+
 # Django & DRF exceptions
 
 
@@ -202,6 +228,72 @@ def test_protected_error() -> None:
         "code": "protected_error",
         "detail": "Requested operation cannot be completed because"
         " a related object is protected.",
+        "attr": None,
+    }
+
+
+def test_unique_together_exception() -> None:
+    """
+    Asserts special handling of __all__ exceptions.
+    """
+    response = exception_handler(
+        ValidationError(
+            {"__all__": ["User with this name and email already exists."]},
+            code="unique_together",
+        )
+    )
+    assert response is not None
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.data == {
+        "type": "validation_error",
+        "code": "unique_together",
+        "detail": "User with this name and email already exists.",
+        "attr": None,
+    }
+
+
+def test_non_field_errors_exception() -> None:
+    """
+    Asserts special handling of non_field_errors exceptions.
+    https://www.django-rest-framework.org/api-guide/settings/#non_field_errors_key
+    """
+    response = exception_handler(
+        ValidationError(
+            {"non_field_errors": ["This form is invalid."]},
+        )
+    )
+    assert response is not None
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.data == {
+        "type": "validation_error",
+        "code": "invalid_input",
+        "detail": "This form is invalid.",
+        "attr": None,
+    }
+
+
+def test_non_field_errors_exception_with_custom_key(settings) -> None:
+    """
+    Asserts special handling of non_field_errors exceptions.
+    https://www.django-rest-framework.org/api-guide/settings/#non_field_errors_key
+    """
+
+    settings.REST_FRAMEWORK = {
+        **settings.REST_FRAMEWORK,
+        "NON_FIELD_ERRORS_KEY": "my_custom_error_key",
+    }
+
+    response = exception_handler(
+        ValidationError(
+            {"my_custom_error_key": ["This form is invalid."]},
+        )
+    )
+    assert response is not None
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.data == {
+        "type": "validation_error",
+        "code": "invalid_input",
+        "detail": "This form is invalid.",
         "attr": None,
     }
 
