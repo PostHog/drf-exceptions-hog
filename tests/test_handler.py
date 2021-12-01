@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.core.exceptions import PermissionDenied
 from django.db.models import ProtectedError
 from django.http import Http404
@@ -362,11 +364,13 @@ def test_not_found_exception_in_debug(settings, res_not_found) -> None:
     assert response.data == res_not_found
 
 
-def test_python_exception_in_debug(settings) -> None:
+@patch("django.core.signals.got_request_exception.send")
+def test_python_exception_in_debug(mock_django_exception, settings) -> None:
     settings.DEBUG = True
     # Not handled, since not APIException instance
     response = exception_handler(TypeError())
     assert response is None
+    mock_django_exception.assert_called_once_with(sender=None, request=None)
 
 
 def test_python_exception_with_enabled_in_debug(
