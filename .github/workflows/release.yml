@@ -1,0 +1,46 @@
+name: Release new version
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  release:
+    name: Release new version
+    runs-on: ubuntu-20.04
+    env:
+      TWINE_USERNAME: __token__
+      TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+    if: |
+      github.event.pull_request.merged
+      && contains(github.event.pull_request.labels.*.name, 'trigger-release')
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+
+      - name: Install build & release dependencies
+        run: |
+          pip install --upgrade pip
+          pip install --upgrade bumpversion
+          pip install -U pip setuptools wheel twine
+
+      - name: Bump version
+        if: steps.bump-type.outputs.bump-type != 'null'
+        run: bumpversion ${{ steps.bump-type.outputs.bump-type }} exceptions_hog/version.py
+
+      - name: Commit bump
+        if: steps.bump-type.outputs.bump-type != 'null'
+        uses: EndBug/add-and-commit@v7
+        with:
+          default_author: github_actions
+          branch: ${{ github.event.pull_request.base.ref }}
+          message: Bump version
+          github_token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+
+      - name: Build release
+        run: python setup.py sdist bdist_wheel
+
+      - name: Publish release
+        run: twine upload dist/*
