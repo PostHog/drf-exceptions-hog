@@ -123,6 +123,68 @@ def test_validation_error_with_simple_nested_serializer_field() -> None:
     }
 
 
+def test_extra() -> None:
+    class ExtraException(Exception):
+        def __init__(self, *args: object) -> None:
+            super().__init__(*args)
+            self.extra = {"id": "123"}  # type: ignore
+
+    response = exception_handler(ExtraException())
+    assert response is not None
+    assert response.data == {
+        "type": "server_error",
+        "code": "error",
+        "detail": "A server error occurred.",
+        "attr": None,
+        "extra": {"id": "123"},
+    }
+
+
+def test_extra_multiple(monkeypatch) -> None:
+    monkeypatch.setattr(api_settings, "SUPPORT_MULTIPLE_EXCEPTIONS", True)
+
+    class ExtraException(exceptions.ValidationError):
+        def __init__(self, *args: object) -> None:
+            super().__init__(*args)
+            self.extra = {"id": "123"}  # type: ignore
+
+    response = exception_handler(
+        ExtraException(
+            {
+                "email": ErrorDetail(string="This field is required.", code="required"),
+                "password": [
+                    ErrorDetail(
+                        string="This password is unsafe.",
+                        code="unsafe_password",
+                    )
+                ],
+            },
+        )
+    )
+    assert response is not None
+    assert response.data == {
+        "type": "multiple",
+        "code": "multiple",
+        "detail": "Multiple exceptions ocurred. Please check list for details.",
+        "attr": None,
+        "extra": {"id": "123"},
+        "list": [
+            {
+                "type": "validation_error",
+                "code": "required",
+                "detail": "This field is required.",
+                "attr": "email",
+            },
+            {
+                "type": "validation_error",
+                "code": "unsafe_password",
+                "detail": "This password is unsafe.",
+                "attr": "password",
+            },
+        ],
+    }
+
+
 def test_validation_error_with_complex_nested_serializer_field() -> None:
     response = exception_handler(
         exceptions.ValidationError(
