@@ -286,6 +286,7 @@ def exception_handler(
                 )
                 for exception_code, exception_key in exception_list
             ],
+            **({"extra": exc.extra} if hasattr(exc, "extra") else {})  # type: ignore
         )
     else:
         response = dict(
@@ -294,5 +295,8 @@ def exception_handler(
             detail=_get_detail(exc, exception_list[0][1]),
             attr=_get_attr(exception_list[0][1]),
         )
+
+        if hasattr(exc, "extra"):  # type: ignore
+            response["extra"] = exc.extra  # type: ignore
 
     return Response(response, status=_get_http_status(exc))

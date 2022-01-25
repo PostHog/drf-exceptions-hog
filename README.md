@@ -104,6 +104,7 @@ where:
   - If you use Django localization, all our exception detail messages support using multiple languages.
 - `attr` will contain the name of the attribute to which the exception is related. Relevant mostly for `validation_error`s.
 - `list` will only be returned when [multiple exceptions](#multiple-exceptions) are enabled and the exception contains multiple exceptions (i.e. `type = multiple`).
+- `extra` is an extra attribute you can set on an exception to pass through extra content, normally in dict form.
 
 ### Multiple exceptions
 
