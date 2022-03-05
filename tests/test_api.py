@@ -81,6 +81,17 @@ class TestAPI:
             "attr": "name",
         }
 
+    def test_validation_error_on_nested_list(self, test_client) -> None:
+
+        response = test_client.post("/exception", {"type": "nested_list_on_serializer"})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data == {
+            "type": "validation_error",
+            "code": "required",
+            "detail": "This field is required.",
+            "attr": "hedgehogs__id",
+        }
+
     def test_unhandled_server_error(
         self,
         test_client,
