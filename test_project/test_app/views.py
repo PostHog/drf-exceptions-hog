@@ -5,7 +5,7 @@ from rest_framework.viewsets import ModelViewSet
 
 from .models import Hedgehog
 from .permissions import NoPermission
-from .serializers import HedgehogSerializer, GroupSerializer
+from .serializers import GroupSerializer, HedgehogSerializer
 
 
 class HedgehogView(ModelViewSet):
@@ -39,7 +39,7 @@ class ExceptionView(GenericAPIView):
             raise APIException()
         elif exception_type == "nested_list_on_serializer":
             s = GroupSerializer()
-            s.create({"hedgehogs": []})
+            s.create({"hedgehogs": [{"id": 1}]})
         elif exception_type == "atomic_transaction":
             Hedgehog.objects.create(name="One")
 

@@ -89,7 +89,7 @@ class TestAPI:
             "type": "validation_error",
             "code": "required",
             "detail": "This field is required.",
-            "attr": "hedgehogs__id",
+            "attr": "name",
         }
 
     def test_unhandled_server_error(

@@ -122,6 +122,7 @@ def test_validation_error_with_simple_nested_serializer_field() -> None:
         "attr": "parent__children_attr",
     }
 
+
 def test_extra_attribute() -> None:
     class ExtraException(Exception):
         def __init__(self, *args: object) -> None:
@@ -131,10 +132,11 @@ def test_extra_attribute() -> None:
     response = exception_handler(ExtraException())
     assert response is not None
     assert response.data == {
-        "type": "validation_error",
-        "code": "required",
-        "detail": "This field is required.",
-        "attr": "times",
+        "type": "server_error",
+        "code": "error",
+        "detail": "A server error occurred.",
+        "attr": None,
+        "extra": {"id": "123"},
     }
 
 

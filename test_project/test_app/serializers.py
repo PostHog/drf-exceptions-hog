@@ -13,11 +13,12 @@ class HedgehogSerializer(serializers.ModelSerializer):
             "age",
         )
 
-class GroupSerializer(serializers.Serializer):
-    hedgehohgs = HedgehogSerializer(many=True)
 
+class GroupSerializer(serializers.Serializer):
+    hedgehogs = HedgehogSerializer(many=True)
 
     def create(self, validated_data):
-        for hedgehog in validated_data['hedgehogs']:
+        for hedgehog in validated_data["hedgehogs"]:
             nested_serializer = HedgehogSerializer(data=hedgehog)
-            nested_serializer.create()
+            nested_serializer.is_valid(True)
+            nested_serializer.save()
