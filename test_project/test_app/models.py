@@ -13,6 +13,7 @@ class Hedgehog(models.Model):
     array: models.ForeignKey = models.ForeignKey(
         ArrayModel,
         related_name="array",
+        related_query_name="hedgehogs",
         on_delete=models.CASCADE,
         null=True,
     )
