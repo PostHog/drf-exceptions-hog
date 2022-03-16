@@ -123,7 +123,7 @@ def test_validation_error_with_simple_nested_serializer_field() -> None:
     }
 
 
-def test_extra() -> None:
+def test_extra_attribute() -> None:
     class ExtraException(Exception):
         def __init__(self, *args: object) -> None:
             super().__init__(*args)
@@ -140,7 +140,7 @@ def test_extra() -> None:
     }
 
 
-def test_extra_multiple(monkeypatch) -> None:
+def test_extra_attribute_with_multiple_exceptions(monkeypatch) -> None:
     monkeypatch.setattr(api_settings, "SUPPORT_MULTIPLE_EXCEPTIONS", True)
 
     class ExtraException(exceptions.ValidationError):
