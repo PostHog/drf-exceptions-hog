@@ -165,9 +165,8 @@ def test_extra_attribute_with_multiple_exceptions(monkeypatch) -> None:
     assert response.data == {
         "type": "multiple",
         "code": "multiple",
-        "detail": "Multiple exceptions ocurred. Please check list for details.",
+        "detail": "Multiple exceptions occurred. Please check list for details.",
         "attr": None,
-        "extra": {"id": "123"},
         "list": [
             {
                 "type": "validation_error",
@@ -182,6 +181,7 @@ def test_extra_attribute_with_multiple_exceptions(monkeypatch) -> None:
                 "attr": "password",
             },
         ],
+        "extra": {"id": "123"},
     }
 
 
@@ -470,7 +470,7 @@ def test_list_response_validation_error_with_multiple_exceptions(
     assert response.data == {
         "type": "multiple",
         "code": "multiple",
-        "detail": "Multiple exceptions ocurred. Please check list for details.",
+        "detail": "Multiple exceptions occurred. Please check list for details.",
         "attr": None,
         "list": [
             {
@@ -526,7 +526,7 @@ def test_list_response_validation_error_with_complex_nested_serializer_field(
     assert response.data == {
         "type": "multiple",
         "code": "multiple",
-        "detail": "Multiple exceptions ocurred. Please check list for details.",
+        "detail": "Multiple exceptions occurred. Please check list for details.",
         "attr": None,
         "list": [
             {
@@ -546,6 +546,144 @@ def test_list_response_validation_error_with_complex_nested_serializer_field(
                 "code": "invalid_too",
                 "detail": "This field is also invalid.",
                 "attr": "parent__l1_attr_2",
+            },
+        ],
+    }
+
+
+def test_list_response_validation_error_with_deeply_nested_serializer_field(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(api_settings, "SUPPORT_MULTIPLE_EXCEPTIONS", True)
+
+    exception = exceptions.ValidationError(
+        {
+            "parent_1": [
+                ErrorDetail(string="This field may not be blank.", code="blank"),
+            ],
+            "parent_2": ErrorDetail(
+                string="This field may not be blank.", code="blank"
+            ),
+            "parent_3": [
+                ErrorDetail(string="This field may not be blank.", code="blank"),
+            ],
+            "parent_4": {
+                "l1_attr_1": [
+                    ErrorDetail(string="This field may not be blank.", code="blank"),
+                ],
+                "l1_attr_2": {
+                    "l2_attr_1": [
+                        ErrorDetail(
+                            string="This field may not be blank.", code="blank"
+                        ),
+                    ]
+                },
+                "l1_attr_3": [
+                    [
+                        ErrorDetail(
+                            string="This field may not be blank.", code="blank"
+                        ),
+                    ]
+                ],
+            },
+            "parent_5": [
+                [
+                    ErrorDetail(string="This field may not be blank.", code="blank"),
+                ]
+            ],
+            "parent_6": [
+                {
+                    "l1_attr_1": [
+                        ErrorDetail(
+                            string="This field may not be blank.", code="blank"
+                        ),
+                    ],
+                    "l1_attr_2": [
+                        ErrorDetail(
+                            string="This field may not be blank.", code="blank"
+                        ),
+                    ],
+                },
+                {
+                    "l1_attr_1": [
+                        ErrorDetail(
+                            string="This field may not be blank.", code="blank"
+                        ),
+                    ],
+                },
+            ],
+        }
+    )
+
+    response = exception_handler(exception)
+
+    assert response is not None
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.data == {
+        "type": "multiple",
+        "code": "multiple",
+        "detail": "Multiple exceptions occurred. Please check list for details.",
+        "attr": None,
+        "list": [
+            {
+                "type": "validation_error",
+                "code": "blank",
+                "detail": "This field may not be blank.",
+                "attr": "parent_1",
+            },
+            {
+                "type": "validation_error",
+                "code": "blank",
+                "detail": "This field may not be blank.",
+                "attr": "parent_2",
+            },
+            {
+                "type": "validation_error",
+                "code": "blank",
+                "detail": "This field may not be blank.",
+                "attr": "parent_3",
+            },
+            {
+                "type": "validation_error",
+                "code": "blank",
+                "detail": "This field may not be blank.",
+                "attr": "parent_4__l1_attr_1",
+            },
+            {
+                "type": "validation_error",
+                "code": "blank",
+                "detail": "This field may not be blank.",
+                "attr": "parent_4__l1_attr_2__l2_attr_1",
+            },
+            {
+                "type": "validation_error",
+                "code": "blank",
+                "detail": "This field may not be blank.",
+                "attr": "parent_4__l1_attr_3__0",
+            },
+            {
+                "type": "validation_error",
+                "code": "blank",
+                "detail": "This field may not be blank.",
+                "attr": "parent_5__0",
+            },
+            {
+                "type": "validation_error",
+                "code": "blank",
+                "detail": "This field may not be blank.",
+                "attr": "parent_6__0__l1_attr_1",
+            },
+            {
+                "type": "validation_error",
+                "code": "blank",
+                "detail": "This field may not be blank.",
+                "attr": "parent_6__0__l1_attr_2",
+            },
+            {
+                "type": "validation_error",
+                "code": "blank",
+                "detail": "This field may not be blank.",
+                "attr": "parent_6__1__l1_attr_1",
             },
         ],
     }
