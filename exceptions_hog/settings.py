@@ -10,10 +10,11 @@ DEFAULTS: Dict = {
     "ENABLE_IN_DEBUG": False,
     "NESTED_KEY_SEPARATOR": "__",
     "SUPPORT_MULTIPLE_EXCEPTIONS": False,
+    "EXTRA_EXCEPTION_PARSERS": [],
 }
 
 # List of settings that may be in string import notation.
 # e.g. `exceptions_hog.exception_handler`
-IMPORT_STRINGS = ("EXCEPTION_REPORTING",)
+IMPORT_STRINGS = ("EXCEPTION_REPORTING", "EXTRA_EXCEPTION_PARSERS")
 
 api_settings: APISettings = APISettings(USER_SETTINGS, DEFAULTS, IMPORT_STRINGS)
