@@ -24,10 +24,15 @@ from .utils import ensure_string
 
 DEFAULT_ERROR_DETAIL = ErrorDetail("A server error occurred.", code="error")
 
-EXCEPTION_PARSERS = (
+DEFAULT_EXCEPTION_PARSERS = (
     ValidationErrorParser(),
     ProtectedObjectExceptionParser(),
     APIExceptionParser(),
+)
+
+all_exception_parsers = (
+    *DEFAULT_EXCEPTION_PARSERS,
+    *[parser() for parser in api_settings.EXTRA_EXCEPTION_PARSERS],
 )
 
 
@@ -334,9 +339,9 @@ def _get_normalized_exceptions(
                         value=index, details_type=ExceptionKeyContentType.index
                     ),
                 ],
-                error_details=error_details,
+                error_details=detail,
             )
-            for index, error_details in enumerate(_details)
+            for index, detail in enumerate(_details)
         ]
 
     def normalize_many_nested_details(
@@ -400,10 +405,7 @@ def _assemble_error(
 
 
 def _get_error_details(exc: Any) -> Optional[Dict]:
-    extra_exception_parsers = [
-        parser() for parser in api_settings.EXTRA_EXCEPTION_PARSERS
-    ]
-    for parser in [*EXCEPTION_PARSERS, *extra_exception_parsers]:
+    for parser in all_exception_parsers:
         if parser.match(exc):
             return parser.parse(exc)
     return None
