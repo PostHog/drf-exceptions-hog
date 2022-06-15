@@ -73,7 +73,7 @@ def _get_error_type(exc) -> Union[str, ErrorTypes]:
 
 def _normalize_exception_codes(
     exception_codes: Dict,
-    parent_key: List[str] = [],
+    parent_key: List[str] = None,
 ) -> List[Dict[str, Union[str, List[str]]]]:
     """
     Returns a normalized one-level dictionary of exception attributes and codes. Used to
@@ -90,6 +90,9 @@ def _normalize_exception_codes(
          }
      ]
     """
+    if parent_key is None:
+        parent_key = []
+
     items: List = []
     for key, exception_code in exception_codes.items():
 
