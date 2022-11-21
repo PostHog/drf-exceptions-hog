@@ -73,7 +73,7 @@ def _get_error_type(exc) -> Union[str, ErrorTypes]:
 
 def _normalize_exception_codes(
     exception_codes: Dict,
-    parent_key: List[str] = None,
+    parent_key: Optional[List[str]] = None,
 ) -> List[Dict[str, Union[str, List[str]]]]:
     """
     Returns a normalized one-level dictionary of exception attributes and codes. Used to
@@ -224,6 +224,7 @@ def exception_reporter(exc: BaseException, context: Optional[Dict] = None) -> No
 def exception_handler(
     exc: BaseException, context: Optional[Dict] = None
 ) -> Optional[Response]:
+    request = context["request"] if context and "request" in context else None
 
     # Special handling for Django base exceptions first
     if isinstance(exc, Http404):
@@ -251,7 +252,7 @@ def exception_handler(
         # See https://github.com/django/django/blob/3.2.9/django/test/client.py#L712
         got_request_exception.send(
             sender=None,
-            request=context["request"] if context and "request" in context else None,
+            request=request,
         )
         return None
 
@@ -270,7 +271,7 @@ def exception_handler(
         _get_main_exception_and_code(exception) for exception in exception_list
     ]
 
-    api_settings.EXCEPTION_REPORTING(exc, context)
+    event_id = api_settings.EXCEPTION_REPORTING(exc, context)
 
     set_rollback()
 
@@ -289,7 +290,6 @@ def exception_handler(
                 )
                 for exception_code, exception_key in exception_list
             ],
-            **({"extra": exc.extra} if hasattr(exc, "extra") else {})  # type: ignore
         )
     else:
         response = dict(
@@ -299,7 +299,9 @@ def exception_handler(
             attr=_get_attr(exception_list[0][1]),
         )
 
-        if hasattr(exc, "extra"):  # type: ignore
-            response["extra"] = exc.extra  # type: ignore
+    if hasattr(exc, "extra"):  # type: ignore
+        response["extra"] = exc.extra  # type: ignore
+    if event_id:
+        response["error_event_id"] = event_id
 
     return Response(response, status=_get_http_status(exc))

@@ -142,11 +142,11 @@ class TestAPI:
 
         assert Hedgehog.objects.count() == count + 1  # only one object is committed
 
-    def test_custom_exception_reporting(
+    def test_custom_exception_reporting_is_called(
         self, monkeypatch, test_client, res_server_error
     ) -> None:
 
-        mock = Mock()
+        mock = Mock(return_value=None)  # No event ID is returned
         monkeypatch.setattr(api_settings, "EXCEPTION_REPORTING", mock)
 
         response = test_client.post("/exception", {"type": "assertion_error"})
@@ -161,6 +161,26 @@ class TestAPI:
         # Error response behavior is the same
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert response.data == res_server_error
+
+    def test_custom_exception_reporting_includes_event_id(
+        self, monkeypatch, test_client, res_server_error
+    ) -> None:
+
+        mock = Mock(return_value="abc-123")  # Event ID `abc-123` is returned
+        monkeypatch.setattr(api_settings, "EXCEPTION_REPORTING", mock)
+
+        response = test_client.post("/exception", {"type": "assertion_error"})
+
+        # Assert that the reporting function was called correctly
+        mock.assert_called_once()
+        assert (
+            str(mock.call_args[0][0])
+            == "Set a custom message and make sure it isn't leaked in the response."
+        )
+
+        # Error response behavior is the same
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert response.data == {**res_server_error, "error_event_id": "abc-123"}
 
     def test_yield_non_drf_exceptions_to_django_in_debug(self, test_client, settings):
         settings.DEBUG = True
