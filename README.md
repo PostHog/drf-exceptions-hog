@@ -1,6 +1,7 @@
 <img src="drf-exceptions-hog.png" alt="Logo" height="125" />
 
 # DRF Exceptions Hog
+[![PyPI version](https://badge.fury.io/py/drf-exceptions-hog.svg)](https://badge.fury.io/py/drf-exceptions-hog) [![License: MIT](https://black.readthedocs.io/en/stable/_static/license.svg)](https://github.com/psf/black/blob/main/LICENSE) [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 Standardized and **easy-to-parse** API error responses for [Django REST Framework][drf].
 
