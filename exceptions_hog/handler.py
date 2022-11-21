@@ -289,7 +289,7 @@ def exception_handler(
                     attr=_get_attr(exception_key),
                 )
                 for exception_code, exception_key in exception_list
-            ]
+            ],
         )
     else:
         response = dict(
