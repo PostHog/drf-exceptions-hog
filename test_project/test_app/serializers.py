@@ -27,5 +27,5 @@ class ArraySerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         for hedgehog in validated_data["hedgehogs"]:
             nested_serializer = HedgehogSerializer(data=hedgehog)
-            nested_serializer.is_valid(True)
+            nested_serializer.is_valid(raise_exception=True)
             nested_serializer.save()
