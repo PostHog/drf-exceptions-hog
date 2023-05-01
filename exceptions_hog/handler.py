@@ -198,7 +198,7 @@ def _get_attr(exception_key: Optional[Union[str, List[str]]] = None) -> Optional
         return final_key if final_key else None
 
     if isinstance(exception_key, list):
-        return override_or_return(api_settings.NESTED_KEY_SEPARATOR.join(exception_key))
+        return override_or_return(api_settings.NESTED_KEY_SEPARATOR.join(map(str, exception_key)))
 
     return override_or_return(exception_key)
 
@@ -258,7 +258,7 @@ def exception_handler(
 
     if isinstance(exc, exceptions.ValidationError):
         codes = exc.get_codes()
-        if type(codes) is list:
+        if isinstance(codes, list):
             exception_list = [codes]
         else:
             exception_list = _normalize_exception_codes(codes)
