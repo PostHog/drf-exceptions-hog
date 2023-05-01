@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
@@ -111,7 +111,7 @@ def _normalize_exception_codes(
 
 
 def _get_main_exception_and_code(
-    exception_codes: Union[Dict, str, List]
+    exception_codes: Union[Dict, str, List, None]
 ) -> Tuple[str, Optional[str]]:
     def override_or_return(code: str) -> str:
         """
@@ -198,7 +198,9 @@ def _get_attr(exception_key: Optional[Union[str, List[str]]] = None) -> Optional
         return final_key if final_key else None
 
     if isinstance(exception_key, list):
-        return override_or_return(api_settings.NESTED_KEY_SEPARATOR.join(exception_key))
+        return override_or_return(
+            api_settings.NESTED_KEY_SEPARATOR.join(map(str, exception_key))
+        )
 
     return override_or_return(exception_key)
 
@@ -256,19 +258,22 @@ def exception_handler(
         )
         return None
 
+    base_exception_list: Union[
+        List[List[Any]], List[None], List[Dict[str, Union[str, List[str]]]]
+    ]
     if isinstance(exc, exceptions.ValidationError):
         codes = exc.get_codes()
-        if type(codes) is list:
-            exception_list = [codes]
+        if isinstance(codes, list):
+            base_exception_list = [codes]
         else:
-            exception_list = _normalize_exception_codes(codes)
+            base_exception_list = _normalize_exception_codes(cast(Dict, codes))
     elif hasattr(exc, "get_codes"):
-        exception_list = [exc.get_codes()]  # type: ignore
+        base_exception_list = [exc.get_codes()]  # type: ignore
     else:
-        exception_list = [None]
+        base_exception_list = [None]
 
     exception_list = [
-        _get_main_exception_and_code(exception) for exception in exception_list
+        _get_main_exception_and_code(exception) for exception in base_exception_list
     ]
 
     event_id = api_settings.EXCEPTION_REPORTING(exc, context)
