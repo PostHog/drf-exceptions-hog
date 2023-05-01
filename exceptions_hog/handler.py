@@ -198,7 +198,9 @@ def _get_attr(exception_key: Optional[Union[str, List[str]]] = None) -> Optional
         return final_key if final_key else None
 
     if isinstance(exception_key, list):
-        return override_or_return(api_settings.NESTED_KEY_SEPARATOR.join(map(str, exception_key)))
+        return override_or_return(
+            api_settings.NESTED_KEY_SEPARATOR.join(map(str, exception_key))
+        )
 
     return override_or_return(exception_key)
 
