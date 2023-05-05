@@ -264,7 +264,10 @@ def test_throttled_exception_with_no_wait() -> None:
         "detail": "Request was throttled.",
         "type": "throttled_error",
     }
-    assert "Retry-After" not in response.headers
+    # older versions in the CI test matrix don't have headers on Response
+    if getattr(response, "headers", None):
+        assert "Retry-After" not in response.headers
+
 
 
 def test_throttled_exception_with_wait() -> None:
@@ -278,7 +281,9 @@ def test_throttled_exception_with_wait() -> None:
         "detail": "Request was throttled. Expected available in 100 seconds.",
         "type": "throttled_error",
     }
-    assert response.headers["Retry-After"] == "100"
+    # older versions in the CI test matrix don't have headers on Response
+    if getattr(response, "headers", None):
+        assert response.headers["Retry-After"] == "100"
 
 
 def test_not_found_exception(res_not_found) -> None:
