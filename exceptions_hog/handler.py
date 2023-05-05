@@ -307,7 +307,7 @@ def exception_handler(
     headers = {}
     if hasattr(exc, "extra"):  # type: ignore
         response["extra"] = exc.extra  # type: ignore
-    if getattr(exc, "wait", None):
+    if isinstance(exc, exceptions.APIException) and getattr(exc, "wait", None):
         headers["Retry-After"] = "%d" % exc.wait
     if event_id:
         response["error_event_id"] = event_id

@@ -55,9 +55,12 @@ def black_main(args):
 
 def mypy_main(args):
     print("Running mypy typechecking")
-    ret = subprocess.call(["mypy"] + args)
-    print("❗️ mypy failed") if ret else print("✅ mypy passed")
-    return ret
+    for proj in PROJECT:
+        ret = subprocess.call(["mypy", "-p", proj])
+        print("❗️ mypy failed for " + proj) if ret else print("✅ mypy passed for " + proj)
+        if ret:
+            return ret
+
 
 
 def split_class_and_function(string):
