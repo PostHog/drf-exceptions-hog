@@ -269,7 +269,6 @@ def test_throttled_exception_with_no_wait() -> None:
         assert "Retry-After" not in response.headers
 
 
-
 def test_throttled_exception_with_wait() -> None:
     throttled = exceptions.Throttled(wait=100)
     response = exception_handler(throttled)
