@@ -253,6 +253,34 @@ def test_nested_serializer_field_with_special_characters() -> None:
 # Django & DRF exceptions
 
 
+def test_throttled_exception_with_no_wait() -> None:
+    throttled = exceptions.Throttled(wait=None)
+    response = exception_handler(throttled)
+    assert response is not None
+    assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+    assert response.data == {
+        "attr": None,
+        "code": "throttled",
+        "detail": "Request was throttled.",
+        "type": "throttled_error",
+    }
+    assert "Retry-After" not in response.headers
+
+
+def test_throttled_exception_with_wait() -> None:
+    throttled = exceptions.Throttled(wait=100)
+    response = exception_handler(throttled)
+    assert response is not None
+    assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+    assert response.data == {
+        "attr": None,
+        "code": "throttled",
+        "detail": "Request was throttled. Expected available in 100 seconds.",
+        "type": "throttled_error",
+    }
+    assert response.headers["Retry-After"] == "100"
+
+
 def test_not_found_exception(res_not_found) -> None:
     response = exception_handler(exceptions.NotFound())
     assert response is not None
