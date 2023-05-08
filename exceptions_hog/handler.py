@@ -304,9 +304,14 @@ def exception_handler(
             attr=_get_attr(exception_list[0][1]),
         )
 
+    headers = {}
     if hasattr(exc, "extra"):  # type: ignore
         response["extra"] = exc.extra  # type: ignore
+    # see https://github.com/encode/django-rest-framework/blob/e08e606c82afd0d5ec82b2c58badec11a4ce825e/rest_framework/views.py#L86-L91 # noqa
+    # for the framework code this is based on
+    if isinstance(exc, exceptions.APIException) and getattr(exc, "wait", None):
+        headers["Retry-After"] = "%d" % exc.wait
     if event_id:
         response["error_event_id"] = event_id
 
-    return Response(response, status=_get_http_status(exc))
+    return Response(response, status=_get_http_status(exc), headers=headers)

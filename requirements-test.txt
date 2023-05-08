@@ -3,7 +3,7 @@ black==22.3.0
 flake8==3.8.*
 importlib_metadata>=1.1.0,<4.3 # Fixes flake8 issue https://github.com/python/importlib_metadata/issues/406
 isort==5.5.*
-mypy==0.782
+mypy==1.2.0
 pytest==6.0.*
 pytest-cov==2.10.1
 pytest-django==3.10.*

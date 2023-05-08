@@ -1,9 +1,9 @@
-from typing import Dict
+from typing import Any, Dict, Optional
 
 from django.conf import settings
 from rest_framework.settings import APISettings
 
-USER_SETTINGS: Dict = getattr(settings, "EXCEPTIONS_HOG", None)
+USER_SETTINGS: Optional[Any] = getattr(settings, "EXCEPTIONS_HOG", None)
 
 DEFAULTS: Dict = {
     "EXCEPTION_REPORTING": "exceptions_hog.handler.exception_reporter",
