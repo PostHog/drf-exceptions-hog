@@ -1,5 +1,6 @@
-from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from dataclasses import dataclass
+from enum import Enum, IntEnum
+from typing import Any, Dict, List, Optional, Union
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
@@ -8,15 +9,32 @@ from django.db.models import ProtectedError
 from django.http import Http404
 from django.utils.translation import gettext as _
 from rest_framework import exceptions, status
+from rest_framework.exceptions import ErrorDetail
 from rest_framework.response import Response
 from rest_framework.settings import api_settings as drf_api_settings
 from rest_framework.views import set_rollback
 
+from .exception_parser import (
+    APIExceptionParser,
+    ProtectedObjectExceptionParser,
+    ValidationErrorParser,
+)
 from .exceptions import ProtectedObjectException
 from .settings import api_settings
 from .utils import ensure_string
 
-DEFAULT_ERROR_DETAIL = _("A server error occurred.")
+DEFAULT_ERROR_DETAIL = ErrorDetail(_("A server error occurred."), code="error")
+
+DEFAULT_EXCEPTION_PARSERS = (
+    ValidationErrorParser(),
+    ProtectedObjectExceptionParser(),
+    APIExceptionParser(),
+)
+
+all_exception_parsers = (
+    *DEFAULT_EXCEPTION_PARSERS,
+    *[parser() for parser in api_settings.EXTRA_EXCEPTION_PARSERS],
+)
 
 
 class ErrorTypes(Enum):
@@ -33,8 +51,131 @@ class ErrorTypes(Enum):
     multiple_exceptions = "multiple"
 
 
+class ExceptionKeyDetailType(IntEnum):
+    single = 1
+    flat = 2
+    nested = 3
+    many_flat = 4
+    many_nested = 5
+    index = 6
+
+
+@dataclass
+class ExceptionKey:
+    value: Union[str, int]
+    details_type: ExceptionKeyDetailType
+
+
+class NormalizedException:
+    def __init__(self, keys: List[ExceptionKey], error_details: List[ErrorDetail]):
+        self.keys = keys
+        self.error_details = error_details
+
+    @property
+    def attr(self) -> Optional[str]:
+        """
+        Returns the offending attribute name. Handles special case
+            of __all__ (used for instance in UniqueTogetherValidator) to return `None`.
+        """
+
+        def override_or_return(key: Optional[str]) -> Optional[str]:
+            """
+            Returns overridden code if needs to change or provided code.
+            """
+            if key in ["__all__", drf_api_settings.NON_FIELD_ERRORS_KEY]:
+                return None
+
+            return key if key else None
+
+        return override_or_return(
+            api_settings.NESTED_KEY_SEPARATOR.join(self.key_values)
+        )
+
+    @property
+    def code(self) -> str:
+        """Always returns the first error code"""
+        code = self.error_details[0].code
+        if code == "invalid":
+            # Special handling for validation errors. Use `invalid_input` instead
+            # of `invalid` to provide more clarity.
+            return "invalid_input"
+        return self.error_details[0].code
+
+    @property
+    def detail(self) -> str:
+        """Always returns the first error detail"""
+        return str(self.error_details[0])
+
+    @property
+    def key_values(self) -> List[str]:
+        # We do str(key.value) to get the actual error string on the ErrorDetail instance
+        return [str(key.value) for key in self.keys]
+
+
+def exception_handler(
+    exc: BaseException, context: Optional[Dict] = None
+) -> Optional[Response]:
+    # Special handling for Django base exceptions first
+    if isinstance(exc, Http404):
+        exc = exceptions.NotFound()
+    elif isinstance(exc, PermissionDenied):
+        exc = exceptions.PermissionDenied()
+    elif isinstance(exc, ProtectedError):
+        exc = ProtectedObjectException(
+            "",
+            protected_objects=exc.protected_objects,
+        )
+    request = context["request"] if context and "request" in context else None
+    if (
+        getattr(settings, "DEBUG", False)
+        and not api_settings.ENABLE_IN_DEBUG
+        and not isinstance(exc, exceptions.APIException)
+    ):
+        # By default don't handle non-DRF errors in DEBUG mode, i.e. Django will treat
+        # unhandled exceptions regularly (very evident yellow error page)
+
+        # NOTE: to make sure we get exception tracebacks in test responses, we need
+        # to make sure this signal is called. The django test client uses this to
+        # pull out the exception traceback.
+        #
+        # See https://github.com/django/django/blob/3.2.9/django/test/client.py#L712
+        got_request_exception.send(sender=None, request=request)
+        return None
+
+    event_id = api_settings.EXCEPTION_REPORTING(exc, context)
+    set_rollback()
+
+    error_details = _get_error_details(exc)
+    normalized_exceptions = _get_normalized_exceptions(error_details)
+
+    if api_settings.SUPPORT_MULTIPLE_EXCEPTIONS and len(normalized_exceptions) > 1:
+        response = dict(
+            type=ErrorTypes.multiple_exceptions.value,
+            code=ErrorTypes.multiple_exceptions.value,
+            detail="Multiple exceptions occurred. Please check list for details.",
+            attr=None,
+            **_get_exception_event_data(event_id, exc),
+            list=[_build_error(exc, error) for error in normalized_exceptions],
+        )
+    else:
+        response = _build_error(exc, normalized_exceptions[0])
+        response.update(_get_exception_event_data(event_id, exc))
+
+    return Response(response, status=_get_http_status(exc), headers=_get_headers(exc))
+
+
+def exception_reporter(exc: BaseException, context: Optional[Dict] = None) -> None:
+    """
+    Logic for reporting an exception to any APMs.
+    Example:
+        if not isinstance(exc, exceptions.APIException):
+            capture_exception(exc)
+    """
+    pass
+
+
 @ensure_string
-def _get_error_type(exc) -> Union[str, ErrorTypes]:
+def _get_error_type(exc: BaseException) -> Union[str, ErrorTypes]:
     """
     Gets the `type` for the exception. Default types are defined for base DRF exceptions.
     """
@@ -71,141 +212,109 @@ def _get_error_type(exc) -> Union[str, ErrorTypes]:
     return ErrorTypes.server_error
 
 
-def _normalize_exception_codes(
-    exception_codes: Dict,
-    parent_key: Optional[List[str]] = None,
-) -> List[Dict[str, Union[str, List[str]]]]:
+def _get_normalized_exceptions(
+    error_details: Optional[Dict],
+    parent_keys: Optional[List[ExceptionKey]] = None,
+) -> List[NormalizedException]:
     """
-    Returns a normalized one-level dictionary of exception attributes and codes. Used to
+    Returns a normalized one-level list of exception attributes and codes. Used to
     standardize multiple exceptions and complex nested exceptions.
-    Example:
-     => [
-         {
-             "parsed_keys": ["form", "password"],
-             "exception_code": ["required"]
-         },
-         {
-             "parsed_keys": ["form", "password"],
-             "exception_code": "min_length"
-         }
-     ]
     """
-    if parent_key is None:
-        parent_key = []
 
-    items: List = []
-    for key, exception_code in exception_codes.items():
+    if error_details is None:
+        return [NormalizedException(keys=[], error_details=[DEFAULT_ERROR_DETAIL])]
 
-        keys: List[str] = parent_key + [key]
+    items: List[NormalizedException] = []
 
-        if isinstance(exception_code, dict):
-            items.extend(
-                _normalize_exception_codes(
-                    exception_code.copy(),
-                    keys,
+    def get_details_type(
+        _details: Union[List, Dict, ErrorDetail]
+    ) -> ExceptionKeyDetailType:
+        if isinstance(_details, list):
+            if isinstance(_details[0], list):
+                # Example: [[ErrorDetail(string="Error", code="error")]]
+                return ExceptionKeyDetailType.many_flat
+            elif isinstance(_details[0], dict):
+                # Example: {"error": ErrorDetail(string="Error", code="error"})
+                return ExceptionKeyDetailType.many_nested
+            else:
+                # Example: [ErrorDetail(string="Error", code="error")]
+                return ExceptionKeyDetailType.flat
+        elif isinstance(_details, dict):
+            # Example: [{"error": [ErrorDetail(string="Error", code="error")]}]
+            return ExceptionKeyDetailType.nested
+        # Example: ErrorDetail(string="Error", code="error")
+        return ExceptionKeyDetailType.single
+
+    def normalize_single_details(
+        _keys: List[ExceptionKey], _details: ErrorDetail
+    ) -> List[NormalizedException]:
+        return [NormalizedException(keys=_keys, error_details=[_details])]
+
+    def normalize_flat_details(
+        _keys: List[ExceptionKey], _details: List[ErrorDetail]
+    ) -> List[NormalizedException]:
+        return [NormalizedException(keys=_keys, error_details=_details)]
+
+    def normalize_nested_details(
+        _keys: List[ExceptionKey], _details: Dict
+    ) -> List[NormalizedException]:
+        return _get_normalized_exceptions(
+            error_details=_details.copy(), parent_keys=_keys
+        )
+
+    def normalize_many_flat_details(
+        _keys: List[ExceptionKey], _details: List[List[ErrorDetail]]
+    ) -> List[NormalizedException]:
+        return [
+            NormalizedException(
+                keys=[
+                    *_keys,
+                    ExceptionKey(
+                        value=index, details_type=ExceptionKeyDetailType.index
+                    ),
+                ],
+                error_details=error_details,
+            )
+            for index, error_details in enumerate(_details)
+        ]
+
+    def normalize_many_nested_details(
+        _keys: List[ExceptionKey], _details: List[Dict]
+    ) -> List[NormalizedException]:
+        result: List[NormalizedException] = []
+        for index, nested_error_details in enumerate(_details):
+            result.extend(
+                _get_normalized_exceptions(
+                    error_details=nested_error_details.copy(),
+                    parent_keys=[
+                        *_keys,
+                        ExceptionKey(
+                            value=index,
+                            details_type=ExceptionKeyDetailType.index,
+                        ),
+                    ],
                 )
             )
-        else:
-            items.append({"parsed_keys": keys, "exception_code": exception_code})
+        return result
+
+    normalizers_by_key_content_type = {
+        ExceptionKeyDetailType.single: normalize_single_details,
+        ExceptionKeyDetailType.flat: normalize_flat_details,
+        ExceptionKeyDetailType.nested: normalize_nested_details,
+        ExceptionKeyDetailType.many_flat: normalize_many_flat_details,
+        ExceptionKeyDetailType.many_nested: normalize_many_nested_details,
+    }
+
+    for key, details in error_details.items():
+        parsed_key = ExceptionKey(value=key, details_type=get_details_type(details))
+        parsed_keys: List[ExceptionKey] = (parent_keys or []) + [parsed_key]
+        normalizer = normalizers_by_key_content_type[parsed_key.details_type]
+        items.extend(normalizer(parsed_keys, details))
+
     return items
 
 
-def _get_main_exception_and_code(
-    exception_codes: Union[Dict, str, List, None]
-) -> Tuple[str, Optional[str]]:
-    def override_or_return(code: str) -> str:
-        """
-        Returns overridden code if needs to change or provided code.
-        """
-        if code == "invalid":
-            # Special handling for validation errors. Use `invalid_input` instead
-            # of `invalid` to provide more clarity.
-            return "invalid_input"
-
-        return code
-
-    # Get base exception codes from DRF (if exception is DRF)
-    if exception_codes:
-        codes = exception_codes
-
-        if isinstance(codes, dict) and "parsed_keys" in codes:
-            # Handling for parsed nested attributes (see `_normalize_exception_codes`)
-            code = (
-                codes["exception_code"][0]
-                if isinstance(codes["exception_code"], list)
-                else codes["exception_code"]
-            )
-            return override_or_return(str(code)), codes["parsed_keys"]
-
-        if isinstance(codes, str):
-            # Only one exception, return
-            return codes, None
-        elif isinstance(codes, dict):
-            # If object is a dict or nested dict, return the key of the very first error
-            key = next(iter(codes))  # Get initial key
-            code = codes[key] if isinstance(codes[key], str) else codes[key][0]
-            return override_or_return(code), key
-        elif isinstance(codes, list):
-            return override_or_return(str(codes[0])), None
-
-    return "error", None
-
-
-@ensure_string
-def _get_detail(exc, exception_key: Union[str, List[str]] = "") -> str:
-    """
-    Returns the human-friendly detail text for a specific insight exception.
-    """
-
-    if hasattr(exc, "detail"):
-        # Get exception details if explicitly set. We don't obtain exception information
-        # from base Python exceptions to avoid leaking sensitive information.
-        if isinstance(exc.detail, str):
-            return str(
-                exc.detail
-            )  # We do str() to get the actual error string on ErrorDetail instances
-        elif isinstance(exc.detail, dict):
-            value = exc.detail
-
-            # Handle nested attributes
-            if isinstance(exception_key, list):
-                for key in exception_key:
-                    value = value[key]
-
-            return str(value if isinstance(value, str) else value[0])
-        elif isinstance(exc.detail, list) and len(exc.detail) > 0:
-            return exc.detail[0]
-
-    return DEFAULT_ERROR_DETAIL
-
-
-def _get_attr(exception_key: Optional[Union[str, List[str]]] = None) -> Optional[str]:
-    """
-    Returns the offending attribute name. Handles special case
-        of __all__ (used for instance in UniqueTogetherValidator) to return `None`.
-    """
-
-    def override_or_return(final_key: Optional[str]) -> Optional[str]:
-        """
-        Returns overridden code if needs to change or provided code.
-        """
-        if final_key == "__all__":
-            return None
-
-        if final_key == drf_api_settings.NON_FIELD_ERRORS_KEY:
-            return None
-
-        return final_key if final_key else None
-
-    if isinstance(exception_key, list):
-        return override_or_return(
-            api_settings.NESTED_KEY_SEPARATOR.join(map(str, exception_key))
-        )
-
-    return override_or_return(exception_key)
-
-
-def _get_http_status(exc) -> int:
+def _get_http_status(exc: BaseException) -> int:
     return (
         exc.status_code
         if hasattr(exc, "status_code")
@@ -213,105 +322,33 @@ def _get_http_status(exc) -> int:
     )
 
 
-def exception_reporter(exc: BaseException, context: Optional[Dict] = None) -> None:
-    """
-    Logic for reporting an exception to any APMs.
-    Example:
-        if not isinstance(exc, exceptions.APIException):
-            capture_exception(exc)
-    """
-    pass
-
-
-def exception_handler(
-    exc: BaseException, context: Optional[Dict] = None
-) -> Optional[Response]:
-    request = context["request"] if context and "request" in context else None
-
-    # Special handling for Django base exceptions first
-    if isinstance(exc, Http404):
-        exc = exceptions.NotFound()
-    elif isinstance(exc, PermissionDenied):
-        exc = exceptions.PermissionDenied()
-    elif isinstance(exc, ProtectedError):
-        exc = ProtectedObjectException(
-            "",
-            protected_objects=exc.protected_objects,
-        )
-
-    if (
-        getattr(settings, "DEBUG", False)
-        and not api_settings.ENABLE_IN_DEBUG
-        and not isinstance(exc, exceptions.APIException)
-    ):
-        # By default don't handle non-DRF errors in DEBUG mode, i.e. Django will treat
-        # unhandled exceptions regularly (very evident yellow error page)
-
-        # NOTE: to make sure we get exception tracebacks in test responses, we need
-        # to make sure this signal is called. The django test client uses this to
-        # pull out the exception traceback.
-        #
-        # See https://github.com/django/django/blob/3.2.9/django/test/client.py#L712
-        got_request_exception.send(
-            sender=None,
-            request=request,
-        )
-        return None
-
-    base_exception_list: Union[
-        List[List[Any]], List[None], List[Dict[str, Union[str, List[str]]]]
-    ]
-    if isinstance(exc, exceptions.ValidationError):
-        codes = exc.get_codes()
-        if isinstance(codes, list):
-            base_exception_list = [codes]
-        else:
-            base_exception_list = _normalize_exception_codes(cast(Dict, codes))
-    elif hasattr(exc, "get_codes"):
-        base_exception_list = [exc.get_codes()]  # type: ignore
-    else:
-        base_exception_list = [None]
-
-    exception_list = [
-        _get_main_exception_and_code(exception) for exception in base_exception_list
-    ]
-
-    event_id = api_settings.EXCEPTION_REPORTING(exc, context)
-
-    set_rollback()
-
-    if api_settings.SUPPORT_MULTIPLE_EXCEPTIONS and len(exception_list) > 1:
-        response = dict(
-            type=ErrorTypes.multiple_exceptions.value,
-            code=ErrorTypes.multiple_exceptions.value,
-            detail="Multiple exceptions ocurred. Please check list for details.",
-            attr=None,
-            list=[
-                dict(
-                    type=_get_error_type(exc),
-                    code=exception_code,
-                    detail=_get_detail(exc, exception_key),
-                    attr=_get_attr(exception_key),
-                )
-                for exception_code, exception_key in exception_list
-            ],
-        )
-    else:
-        response = dict(
-            type=_get_error_type(exc),
-            code=exception_list[0][0],
-            detail=_get_detail(exc, exception_list[0][1]),
-            attr=_get_attr(exception_list[0][1]),
-        )
-
-    headers = {}
-    if hasattr(exc, "extra"):  # type: ignore
-        response["extra"] = exc.extra  # type: ignore
-    # see https://github.com/encode/django-rest-framework/blob/e08e606c82afd0d5ec82b2c58badec11a4ce825e/rest_framework/views.py#L86-L91 # noqa
-    # for the framework code this is based on
-    if isinstance(exc, exceptions.APIException) and getattr(exc, "wait", None):
-        headers["Retry-After"] = "%d" % exc.wait
+def _get_exception_event_data(event_id: str, exc: BaseException) -> Dict:
+    data = {}
+    if hasattr(exc, "extra"):
+        data["extra"] = getattr(exc, "extra")
     if event_id:
-        response["error_event_id"] = event_id
+        data["error_event_id"] = event_id
+    return data
 
-    return Response(response, status=_get_http_status(exc), headers=headers)
+
+def _get_headers(exc: BaseException) -> Dict:
+    headers = {}
+    if isinstance(exc, exceptions.APIException) and getattr(exc, "wait", None):
+        headers["Retry-After"] = f"{getattr(exc, 'wait')}"
+    return headers
+
+
+def _build_error(exc: BaseException, normalized_exc: NormalizedException) -> Dict:
+    return dict(
+        type=_get_error_type(exc),
+        code=normalized_exc.code,
+        detail=normalized_exc.detail,
+        attr=normalized_exc.attr,
+    )
+
+
+def _get_error_details(exc: Any) -> Optional[Dict]:
+    for parser in all_exception_parsers:
+        if parser.match(exc):
+            return parser.parse(exc)
+    return None
