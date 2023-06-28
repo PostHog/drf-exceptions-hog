@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from enum import Enum
+from enum import Enum, IntEnum
 from typing import Any, Dict, List, Optional, Union
 
 from django.conf import settings
@@ -7,6 +7,7 @@ from django.core.exceptions import PermissionDenied
 from django.core.signals import got_request_exception
 from django.db.models import ProtectedError
 from django.http import Http404
+from django.utils.translation import gettext as _
 from rest_framework import exceptions, status
 from rest_framework.exceptions import ErrorDetail
 from rest_framework.response import Response
@@ -22,7 +23,7 @@ from .exceptions import ProtectedObjectException
 from .settings import api_settings
 from .utils import ensure_string
 
-DEFAULT_ERROR_DETAIL = ErrorDetail("A server error occurred.", code="error")
+DEFAULT_ERROR_DETAIL = ErrorDetail(_("A server error occurred."), code="error")
 
 DEFAULT_EXCEPTION_PARSERS = (
     ValidationErrorParser(),
@@ -50,19 +51,19 @@ class ErrorTypes(Enum):
     multiple_exceptions = "multiple"
 
 
-class ExceptionKeyContentType(Enum):
-    single = "single"
-    flat = "flat"
-    nested = "nested"
-    many_flat = "many_flat"
-    many_nested = "many_nested"
-    index = "index"
+class ExceptionKeyDetailType(IntEnum):
+    single = 1
+    flat = 2
+    nested = 3
+    many_flat = 4
+    many_nested = 5
+    index = 6
 
 
 @dataclass
 class ExceptionKey:
     value: Union[str, int]
-    details_type: ExceptionKeyContentType
+    details_type: ExceptionKeyDetailType
 
 
 class NormalizedException:
@@ -124,7 +125,7 @@ def exception_handler(
             "",
             protected_objects=exc.protected_objects,
         )
-
+    request = context["request"] if context and "request" in context else None
     if (
         getattr(settings, "DEBUG", False)
         and not api_settings.ENABLE_IN_DEBUG
@@ -138,13 +139,10 @@ def exception_handler(
         # pull out the exception traceback.
         #
         # See https://github.com/django/django/blob/3.2.9/django/test/client.py#L712
-        got_request_exception.send(
-            sender=None,
-            request=context["request"] if context and "request" in context else None,
-        )
+        got_request_exception.send(sender=None, request=request)
         return None
 
-    api_settings.EXCEPTION_REPORTING(exc, context)
+    event_id = api_settings.EXCEPTION_REPORTING(exc, context)
     set_rollback()
 
     error_details = _get_error_details(exc)
@@ -156,15 +154,14 @@ def exception_handler(
             code=ErrorTypes.multiple_exceptions.value,
             detail="Multiple exceptions occurred. Please check list for details.",
             attr=None,
-            list=[
-                _assemble_error(exc, error, False) for error in normalized_exceptions
-            ],
-            **_get_extra(exc)
+            **_get_exception_event_data(event_id, exc),
+            list=[_build_error(exc, error) for error in normalized_exceptions],
         )
     else:
-        response = _assemble_error(exc, normalized_exceptions[0])
+        response = _build_error(exc, normalized_exceptions[0])
+        response.update(_get_exception_event_data(event_id, exc))
 
-    return Response(response, status=_get_http_status(exc))
+    return Response(response, status=_get_http_status(exc), headers=_get_headers(exc))
 
 
 def exception_reporter(exc: BaseException, context: Optional[Dict] = None) -> None:
@@ -178,7 +175,7 @@ def exception_reporter(exc: BaseException, context: Optional[Dict] = None) -> No
 
 
 @ensure_string
-def _get_error_type(exc) -> Union[str, ErrorTypes]:
+def _get_error_type(exc: BaseException) -> Union[str, ErrorTypes]:
     """
     Gets the `type` for the exception. Default types are defined for base DRF exceptions.
     """
@@ -217,74 +214,11 @@ def _get_error_type(exc) -> Union[str, ErrorTypes]:
 
 def _get_normalized_exceptions(
     error_details: Optional[Dict],
-    parent_keys: List[ExceptionKey] = None,
+    parent_keys: Optional[List[ExceptionKey]] = None,
 ) -> List[NormalizedException]:
     """
     Returns a normalized one-level list of exception attributes and codes. Used to
     standardize multiple exceptions and complex nested exceptions.
-
-    Example:
-
-    Input => {
-        "update": [
-             ErrorDetail(
-                string="This field is required.",
-                code="required",
-            ),
-        ]
-        "form": {
-             "email": [
-                ErrorDetail(
-                    string="This field is required.",
-                    code="required",
-                ),
-            ],
-            "password": [
-                ErrorDetail(
-                    string="This password is unsafe.",
-                    code="unsafe_password",
-                )
-            ],
-        }
-    }
-
-    Output => [
-         NormalizedException(
-             "keys": [
-                ExceptionKey(value="update", type="flat")
-             ],
-             "error_details": [
-                ErrorDetail(
-                    string="This field is required.",
-                    code="required",
-                ),
-            ]
-         ),
-         NormalizedException(
-             "keys": [
-                ExceptionKey(value="form", type="nested")
-                ExceptionKey(value="email", type="flat")
-             ],
-             "error_details": [
-                ErrorDetail(
-                    string="This field is required.",
-                    code="required",
-                ),
-            ]
-         ),
-         NormalizedException(
-             "keys": [
-                ExceptionKey(value="form", type="nested")
-                ExceptionKey(value="password", type="flat")
-             ],
-             "error_details": [
-                ErrorDetail(
-                    string="This password is unsafe.",
-                    code="unsafe_password",
-                )
-            ]
-         ),
-    ]
     """
 
     if error_details is None:
@@ -294,22 +228,22 @@ def _get_normalized_exceptions(
 
     def get_details_type(
         _details: Union[List, Dict, ErrorDetail]
-    ) -> ExceptionKeyContentType:
+    ) -> ExceptionKeyDetailType:
         if isinstance(_details, list):
             if isinstance(_details[0], list):
                 # Example: [[ErrorDetail(string="Error", code="error")]]
-                return ExceptionKeyContentType.many_flat
+                return ExceptionKeyDetailType.many_flat
             elif isinstance(_details[0], dict):
                 # Example: {"error": ErrorDetail(string="Error", code="error"})
-                return ExceptionKeyContentType.many_nested
+                return ExceptionKeyDetailType.many_nested
             else:
                 # Example: [ErrorDetail(string="Error", code="error")]
-                return ExceptionKeyContentType.flat
+                return ExceptionKeyDetailType.flat
         elif isinstance(_details, dict):
             # Example: [{"error": [ErrorDetail(string="Error", code="error")]}]
-            return ExceptionKeyContentType.nested
+            return ExceptionKeyDetailType.nested
         # Example: ErrorDetail(string="Error", code="error")
-        return ExceptionKeyContentType.single
+        return ExceptionKeyDetailType.single
 
     def normalize_single_details(
         _keys: List[ExceptionKey], _details: ErrorDetail
@@ -336,12 +270,12 @@ def _get_normalized_exceptions(
                 keys=[
                     *_keys,
                     ExceptionKey(
-                        value=index, details_type=ExceptionKeyContentType.index
+                        value=index, details_type=ExceptionKeyDetailType.index
                     ),
                 ],
-                error_details=detail,
+                error_details=error_details,
             )
-            for index, detail in enumerate(_details)
+            for index, error_details in enumerate(_details)
         ]
 
     def normalize_many_nested_details(
@@ -356,31 +290,31 @@ def _get_normalized_exceptions(
                         *_keys,
                         ExceptionKey(
                             value=index,
-                            details_type=ExceptionKeyContentType.index,
+                            details_type=ExceptionKeyDetailType.index,
                         ),
                     ],
                 )
             )
         return result
 
-    switcher = {
-        ExceptionKeyContentType.single: normalize_single_details,
-        ExceptionKeyContentType.flat: normalize_flat_details,
-        ExceptionKeyContentType.nested: normalize_nested_details,
-        ExceptionKeyContentType.many_flat: normalize_many_flat_details,
-        ExceptionKeyContentType.many_nested: normalize_many_nested_details,
+    normalizers_by_key_content_type = {
+        ExceptionKeyDetailType.single: normalize_single_details,
+        ExceptionKeyDetailType.flat: normalize_flat_details,
+        ExceptionKeyDetailType.nested: normalize_nested_details,
+        ExceptionKeyDetailType.many_flat: normalize_many_flat_details,
+        ExceptionKeyDetailType.many_nested: normalize_many_nested_details,
     }
 
     for key, details in error_details.items():
         parsed_key = ExceptionKey(value=key, details_type=get_details_type(details))
         parsed_keys: List[ExceptionKey] = (parent_keys or []) + [parsed_key]
-        normalizer = switcher[parsed_key.details_type]
+        normalizer = normalizers_by_key_content_type[parsed_key.details_type]
         items.extend(normalizer(parsed_keys, details))
 
     return items
 
 
-def _get_http_status(exc) -> int:
+def _get_http_status(exc: BaseException) -> int:
     return (
         exc.status_code
         if hasattr(exc, "status_code")
@@ -388,19 +322,28 @@ def _get_http_status(exc) -> int:
     )
 
 
-def _get_extra(exc: BaseException) -> Dict:
-    return {"extra": getattr(exc, "extra")} if hasattr(exc, "extra") else {}
+def _get_exception_event_data(event_id: str, exc: BaseException) -> Dict:
+    data = {}
+    if hasattr(exc, "extra"):
+        data["extra"] = getattr(exc, "extra")
+    if event_id:
+        data["error_event_id"] = event_id
+    return data
 
 
-def _assemble_error(
-    exc: BaseException, normalized_exc: NormalizedException, with_extra=True
-) -> Dict:
+def _get_headers(exc: BaseException) -> Dict:
+    headers = {}
+    if isinstance(exc, exceptions.APIException) and getattr(exc, "wait", None):
+        headers["Retry-After"] = f"{getattr(exc, 'wait')}"
+    return headers
+
+
+def _build_error(exc: BaseException, normalized_exc: NormalizedException) -> Dict:
     return dict(
         type=_get_error_type(exc),
         code=normalized_exc.code,
         detail=normalized_exc.detail,
         attr=normalized_exc.attr,
-        **(_get_extra(exc) if with_extra else {})
     )
 
 

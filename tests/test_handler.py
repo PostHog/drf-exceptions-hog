@@ -167,6 +167,7 @@ def test_extra_attribute_with_multiple_exceptions(monkeypatch) -> None:
         "code": "multiple",
         "detail": "Multiple exceptions occurred. Please check list for details.",
         "attr": None,
+        "extra": {"id": "123"},
         "list": [
             {
                 "type": "validation_error",
@@ -181,7 +182,6 @@ def test_extra_attribute_with_multiple_exceptions(monkeypatch) -> None:
                 "attr": "password",
             },
         ],
-        "extra": {"id": "123"},
     }
 
 
