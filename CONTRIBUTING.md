@@ -4,7 +4,7 @@ There are many ways to contribute to DRF Exceptions Hog.
 
 Just create a new pull request if you want to make an update, we actively review every PR.
 
-If you want to speak to us before doing lots of work, find us on [Slack](https://posthog.com/slack) - we're very responsive and friendly!
+If you want to speak to us before doing lots of work, find us in [our community](https://posthog.com/questions) - we're very responsive and friendly!
 
 # Issues
 
