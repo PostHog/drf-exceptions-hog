@@ -17,7 +17,7 @@ jobs:
       )
     steps:
       - name: Check out repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5 # v2.7.0
         with:
           ref: ${{ github.event.pull_request.base.ref }}
           token: ${{ secrets.POSTHOG_BOT_PAT }}
@@ -56,7 +56,7 @@ jobs:
 
       - name: Create bump pull request
         id: create-pr
-        uses: peter-evans/create-pull-request@v3
+        uses: peter-evans/create-pull-request@18f7dc018cc2cd597073088f7c7591b9d1c02672 # v3.14.0
         with:
           token: ${{ secrets.POSTHOG_BOT_PAT }}
           commit-message: Bump drf-exceptions-hog to ${{ steps.version.outputs.new }}
