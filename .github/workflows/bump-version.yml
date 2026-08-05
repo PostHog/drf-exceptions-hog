@@ -20,7 +20,6 @@ jobs:
         uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5 # v2.7.0
         with:
           ref: ${{ github.event.pull_request.base.ref }}
-          token: ${{ secrets.POSTHOG_BOT_PAT }}
           fetch-depth: 0
 
       - name: Detect version bump type
@@ -56,9 +55,12 @@ jobs:
 
       - name: Create bump pull request
         id: create-pr
-        uses: peter-evans/create-pull-request@18f7dc018cc2cd597073088f7c7591b9d1c02672 # v3.14.0
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
-          token: ${{ secrets.POSTHOG_BOT_PAT }}
+          # Commit through the GitHub API so the bump carries GitHub's signature,
+          # which the org-wide signed-commits ruleset requires. Signing only works
+          # with a bot-generated token, never a PAT, so this uses GITHUB_TOKEN.
+          sign-commits: true
           commit-message: Bump drf-exceptions-hog to ${{ steps.version.outputs.new }}
           branch: bump-${{ steps.version.outputs.new }}
           delete-branch: true
