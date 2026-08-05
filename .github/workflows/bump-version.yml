@@ -4,6 +4,12 @@ on:
   pull_request:
     types: [closed]
 
+# The repo's default workflow permission is read-only, so GITHUB_TOKEN needs these
+# spelled out to push the bump branch and open its pull request.
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   label-version-bump:
     name: Bump version based on PR label
